@@ -1,0 +1,37 @@
+<view class="page">
+  <view class="status-bar">
+    <view>
+      <text class="title">二维云台</text>
+      <text class="mode">{{modeLabel}}</text>
+    </view>
+    <view class="connection {{online ? 'online' : ''}}">
+      <view class="dot"></view>
+      <text>{{online ? 'STM32 在线' : '等待 STM32'}}</text>
+    </view>
+  </view>
+
+  <view class="metrics">
+    <view class="metric">
+      <text class="metric-label">水平角</text>
+      <text class="metric-value">{{roll}}°</text>
+    </view>
+    <view class="metric">
+      <text class="metric-label">俯仰角</text>
+      <text class="metric-value">{{pitch}}°</text>
+    </view>
+    <view class="metric">
+      <text class="metric-label">距离</text>
+      <text class="metric-value">{{distanceText}}</text>
+    </view>
+  </view>
+
+  <view class="section-title">扫描模式</view>
+  <view class="controls">
+    <button class="command horizontal" data-mode="horizontal" bindtap="startScan" disabled="{{busy}}" loading="{{busy && pendingMode === 'horizontal'}}">左右扫描</button>
+    <button class="command vertical" data-mode="vertical" bindtap="startScan" disabled="{{busy}}" loading="{{busy && pendingMode === 'vertical'}}">上下扫描</button>
+    <button class="command all" data-mode="all" bindtap="startScan" disabled="{{busy}}" loading="{{busy && pendingMode === 'all'}}">全范围扫描</button>
+    <button class="command stop" data-mode="stop" bindtap="startScan" disabled="{{busy}}" loading="{{busy && pendingMode === 'stop'}}">停止并回中</button>
+  </view>
+
+  <view class="endpoint">Gimbal-8266 · 192.168.4.1</view>
+</view>

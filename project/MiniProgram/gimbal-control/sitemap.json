@@ -1,0 +1,9 @@
+{
+  "desc": "Gimbal control page",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

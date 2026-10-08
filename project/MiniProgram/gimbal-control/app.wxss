@@ -1,0 +1,9 @@
+page {
+  background: #f4f6f5;
+  color: #17201c;
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+}
+
+button::after {
+  border: 0;
+}

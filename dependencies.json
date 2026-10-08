@@ -1,0 +1,7 @@
+{
+  "stm32": {"device": "STM32F407ZG", "ide": "Keil MDK 5", "compiler": "ARMCC 5.06", "pack": "Keil.STM32F4xx_DFP.1.0.8", "hse_hz": 8000000, "target": "Gimbal STLink"},
+  "esp8266": {"core": "3.1.2", "base_fqbn": "esp8266:esp8266:generic", "handheld_fqbn": "esp8266:esp8266:nodemcuv2", "board_index": "https://arduino.esp8266.com/stable/package_esp8266com_index.json"},
+  "esp32_camera": {"core": "3.3.11", "fqbn": "esp32:esp32:esp32cam", "board_index": "https://espressif.github.io/arduino-esp32/package_esp32_index.json"},
+  "web": {"third_party": ["project/three.min.js", "project/OrbitControls.umd.js"], "installation": "local vendored scripts; no npm install required"},
+  "maintenance": {"python_min": "3.7", "node_min": "18", "git": "2.x"}
+}

@@ -1,0 +1,12 @@
+{
+  "pages": [
+    "pages/index/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "二维云台",
+    "navigationBarBackgroundColor": "#f4f6f5",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f6f5"
+  },
+  "sitemapLocation": "sitemap.json"
+}

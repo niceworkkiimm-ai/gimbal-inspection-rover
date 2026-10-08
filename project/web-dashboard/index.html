@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111915">
+  <title>二维云台雷达监控台</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><span></span></span>
+      <div>
+        <strong>二维云台雷达监控台</strong>
+        <small>GIMBAL RADAR CONSOLE</small>
+      </div>
+    </div>
+    <div class="connection" id="connectionState" data-state="demo">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="connectionText">演示数据</span>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <section class="radar-panel" aria-labelledby="radarTitle">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">实时扫描</p>
+          <h1 id="radarTitle">障碍物雷达</h1>
+        </div>
+        <div class="toolbar" aria-label="雷达控制">
+          <div class="segmented" aria-label="数据来源">
+            <button type="button" class="segment is-active" id="demoMode" aria-pressed="true">演示</button>
+            <button type="button" class="segment" id="deviceMode" aria-pressed="false">设备</button>
+          </div>
+          <button type="button" class="command-button" id="pauseButton">暂停</button>
+          <button type="button" class="command-button" id="clearButton">清除轨迹</button>
+        </div>
+      </div>
+
+      <div class="radar-stage">
+        <canvas id="radarCanvas" role="img" aria-label="云台超声波半圆雷达，显示当前扫描方向与最近障碍点"></canvas>
+        <div class="range-label range-label-near">0</div>
+        <div class="range-label range-label-far">400 cm</div>
+      </div>
+
+      <div class="radar-footer">
+        <div class="legend">
+          <span><i class="legend-dot safe"></i>正常目标</span>
+          <span><i class="legend-dot near"></i>近距离</span>
+          <span><i class="legend-line"></i>当前方向</span>
+        </div>
+        <span id="sampleTime">等待数据</span>
+      </div>
+    </section>
+
+    <aside class="telemetry" aria-label="实时遥测">
+      <section class="distance-panel">
+        <div class="section-title">
+          <span>当前测距</span>
+          <span class="object-state" id="objectState" data-state="clear">无目标</span>
+        </div>
+        <div class="distance-value"><strong id="distanceValue">---</strong><span>cm</span></div>
+        <div class="distance-bar" aria-hidden="true"><span id="distanceBar"></span></div>
+        <div class="distance-scale"><span>近</span><span>400 cm</span></div>
+      </section>
+
+      <section class="angle-panel">
+        <h2>云台实时数据</h2>
+        <dl class="angle-grid">
+          <div>
+            <dt>水平控制角</dt>
+            <dd><span id="yawValue">0.0</span><small>°</small></dd>
+          </div>
+          <div>
+            <dt>俯仰控制角</dt>
+            <dd><span id="pitchValue">0.0</span><small>°</small></dd>
+          </div>
+          <div>
+            <dt>数据序号</dt>
+            <dd><span id="sequenceValue">0</span></dd>
+          </div>
+          <div>
+            <dt>刷新频率</dt>
+            <dd><span id="rateValue">0</span><small>Hz</small></dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="gas-panel">
+        <div class="gas-title"><h2>气体环境</h2><span>4MZ-HH4 · V5.3</span></div>
+        <div id="gasGrid" class="gas-grid"><div class="gas-item"><strong>等待模块数据</strong><small>CH4 / O2 / CO / H2S</small></div></div>
+      </section>
+
+      <section class="targets-panel">
+        <div class="section-title">
+          <h2>已发现目标</h2>
+          <span class="target-count" id="targetCount">0</span>
+        </div>
+        <div class="targets-list" id="targetsList">
+          <p class="empty-state">扫描区域暂无有效目标</p>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer-strip">
+    <span><b id="sourceLabel">模拟器</b> 数据源</span>
+    <span><b>2–400 cm</b> 有效量程</span>
+    <span><b id="packetState">正常</b> 数据链路</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
