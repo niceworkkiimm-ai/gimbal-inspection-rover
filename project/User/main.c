@@ -1,7 +1,10 @@
 /**
  * 项目迭代: V8.13（适配PCB：基座与气体模块串口用途互换）
- * 当前版本: 网页V8.12；STM32 V8.13、基座ESP V4.9、手持V1.6、ESP32CAM_Camera V1.2
- * 更新日期: 2026-10-02
+ * 当前版本: 网页V8.12；STM32 V8.13、基座ESP V4.9、手持V1.6、ESP32CAM_Camera V1.3
+ * 最近更新: 2026-10-25（仅摄像头画面方向；STM32执行代码未变）
+ * 摄像头V1.3：相对V1.2将画面旋转180度，只需重烧ESP32CAM_Camera。
+ *   - CAMERA_VFLIP=0、CAMERA_HMIRROR=1；帧率、分辨率和完整接线不变。
+ * 以下为STM32 V8.13（2026-10-02）及更早版本的历史变更。
  * V8.13：基座ESP使用USART2(PA2 TX/PA3 RX)，115200/8N1。
  *   - ESP RX->PA2(USART2_TX)，ESP TX->PA3(USART2_RX)。
  *   - 气体模块使用UART4(PC10 TX/PC11 RX)，9600/8N1，Modbus-RTU。

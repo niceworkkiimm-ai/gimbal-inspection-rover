@@ -13,11 +13,13 @@
 | STM32 主控 | V8.13 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
 | 基座 ESP-01S | V4.9 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
-| AI Thinker ESP32-CAM | V1.2 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
+| AI Thinker ESP32-CAM | V1.3 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
 | 二维网页 | V8.12 | `project/gimbal-radar-standalone.html` |
 | 三维网页 | V8.12 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部 V8.13 完整接线表为准。
+
+摄像头 V1.3（2026-10-25）相对 V1.2 将画面旋转 180°：`CAMERA_VFLIP=0`、`CAMERA_HMIRROR=1`。方向调整在摄像头传感器端完成，各查看页面共用调整后的画面；只需重新烧录摄像头，帧率、分辨率和接线不变。编译检查不代表已经完成实物方向验证。
 
 ## 已实现功能
 

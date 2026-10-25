@@ -1,5 +1,5 @@
 #pragma once
-// V1.2 / V8.5：10/5/3帧选项，上下翻转已由摄像头完成。默认关闭，不控制小车。
+// V1.3：10/5/3帧选项，相对V1.2旋转180度已由摄像头完成。默认关闭，不控制小车。
 static const char CAMERA_HOME[] PROGMEM = R"CAMERAHTML(<!doctype html>
 <html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>嵌入电团队 · 车载画面</title>
@@ -11,7 +11,7 @@ select{font:inherit;padding:10px;border:1px solid #395548;border-radius:8px;back
 button:first-child{background:#54da9d;color:#102419;font-weight:600}.view{margin:18px 0;background:#080f0b;aspect-ratio:4/3;border:1px solid #395548;border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden}
 img{width:100%;height:100%;object-fit:contain}img[hidden]{display:none}#empty{position:absolute;padding:20px;text-align:center;color:#a7b8af}#status{min-height:48px}
 small{color:#9eb6a7}a{color:#54da9d}</style>
-<main><h1>嵌入电团队 · 车载画面</h1><p>320 × 240 · 最高约 10 帧/秒 · 摄像头 V1.2 · ESP32-CAM</p>
+<main><h1>嵌入电团队 · 车载画面</h1><p>320 × 240 · 最高约 10 帧/秒 · 摄像头 V1.3 · ESP32-CAM</p>
 <div><button id="start">开启画面</button> <button id="stop" disabled>关闭画面</button> <label>帧率 <select id="rate" aria-label="视频帧率"><option value="10">10 帧/秒</option><option value="5">5 帧/秒</option><option value="3">3 帧/秒</option></select></label></div>
 <div class="view"><img id="frame" alt="小车前方摄像头画面" hidden><span id="empty">画面未开启</span></div>
 <div id="status" role="status">只显示摄像头，不发送车辆控制指令。</div>
