@@ -84,6 +84,8 @@
     // Each view owns its model resources; closing a saved scan never disposes the live model.
     const {machine, sensorAxisY: sensorY} = root.GimbalModel.create(T); scene.add(machine);
     const geometry = new T.SphereGeometry(2, 12, 8), materials = new Map();
+    const scanBounds=new T.Box3(new T.Vector3(-45,0,-35),new T.Vector3(45,sensorY,35)),fitPoints=[];
+    for(const x of [-45,45])for(const y of [0,sensorY])for(const z of [-35,35])fitPoints.push(new T.Vector3(x,y,z));
     scan.points.forEach(point => {
       const tint = color(point.distance);
       if (!materials.has(tint)) materials.set(tint, new T.MeshBasicMaterial({color: tint}));
@@ -91,11 +93,22 @@
       const distance = point.distance <= 60 ? point.distance : 60 + (point.distance - 60) / 90 * 40;
       const p = projection(distance, point.pitch), yaw = radians(point.yaw);
       mesh.position.set(p.forward * 4 * Math.sin(yaw), sensorY + p.height * 4, p.forward * 4 * Math.cos(yaw)); scene.add(mesh);
+      scanBounds.expandByPoint(mesh.position);
+      fitPoints.push(mesh.position.clone());
     });
     const render = () => renderer.render(scene, camera);
     const resize = () => {
       const rect = host.getBoundingClientRect(), w = Math.max(1, rect.width), h = Math.max(1, rect.height);
-      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); render();
+      renderer.setSize(w, h, false); camera.aspect = w / h;
+      if(scan.dataSource==='simulation'){
+        const center=scanBounds.getCenter(new T.Vector3()),direction=camera.position.clone().sub(controls.target).normalize();
+        const right=new T.Vector3().crossVectors(camera.up,direction).normalize(),up=new T.Vector3().crossVectors(direction,right).normalize(),tan=Math.tan(T.MathUtils.degToRad(camera.fov/2));
+        let distance=150;
+        for(const point of fitPoints){const delta=point.clone().sub(center),depth=delta.dot(direction);distance=Math.max(distance,depth+Math.abs(delta.dot(up))/tan,depth+Math.abs(delta.dot(right))/(tan*camera.aspect));}
+        distance*=1.1;
+        controls.maxDistance=Math.max(1800,distance*1.3);controls.target.copy(center);camera.position.copy(center).addScaledVector(direction,distance);controls.update();
+      }
+      camera.updateProjectionMatrix(); render();
     };
     controls.addEventListener('change', render); controls.update();
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
@@ -137,11 +150,14 @@
       @media(max-width:600px){#scan-snapshot-viewer{padding:13px}#scan-snapshot-viewer .snapshot-two{grid-template-columns:1fr;height:65vh;min-height:430px}#scan-snapshot-viewer h2{font-size:16px}}
     </style><header><h2 id="scan-snapshot-title"></h2><button type="button" autofocus>关闭</button></header><p id="scan-snapshot-meta"></p><div class="snapshot-view"></div><p class="snapshot-legend"></p>`;
     const pose = checkpoint.pose;
-    dialog.querySelector('h2').textContent = '路线点 #' + checkpoint.id + ' · ' + scan.kind.toUpperCase() + ' 扫描快照';
+    dialog.querySelector('h2').textContent = '路线点 #' + checkpoint.id + ' · ' +
+      (scan.dataSource==='simulation'?'模拟数据 · ':'')+(checkpoint.label?checkpoint.label+' · ':'')+scan.kind.toUpperCase() + ' 扫描快照';
     dialog.querySelector('#scan-snapshot-meta').textContent = new Date(checkpoint.capturedAt).toLocaleString('zh-CN', {hour12: false}) +
       ' · X ' + pose.x.toFixed(2) + ' m · Y ' + pose.y.toFixed(2) + ' m · 航向 ' + (pose.heading * 180 / Math.PI).toFixed(1) + '° · ' + scan.points.length + ' 个扫描点';
     dialog.querySelector('.snapshot-legend').textContent = '红色 <20 cm · 黄色 20–40 cm · 绿色 40–150 cm · 近距离放大显示。' +
-      (scan.kind === '3d' ? '拖动旋转，滚轮或双指缩放。' : '') + '这是保存时的只读快照。';
+      (scan.kind === '3d' ? '拖动旋转，滚轮或双指缩放。' : '') +
+      (scan.dataSource==='simulation'?'这是程序生成的模拟地貌，不代表现场实测。':'这是保存时的只读快照。');
+    root.dispatchEvent(new CustomEvent('gimbal:snapshot-open'));
     let destroy = () => {}, done = false;
     const finish = () => {
       if (done) return; done = true; destroy(); dialog.remove();

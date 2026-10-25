@@ -5,6 +5,7 @@
  */
 (() => {
   'use strict';
+  if(window.RoverDemo&&window.RoverDemo.enabled)return;
   const main = document.querySelector('main.app');
   if (!main || document.getElementById('camera-panel')) return;
   const host = document.createElement('section');

@@ -140,6 +140,7 @@
       return {distance:p.distance,yaw:p.yaw,pitch:p.pitch};
     });
     const copy={kind:scan.kind,points};
+    if(scan.dataSource==='simulation')copy.dataSource='simulation';
     if(scan.view!==undefined){
       check(scan.view&&['camera','target'].every(k=>Array.isArray(scan.view[k])&&
         scan.view[k].length===3&&scan.view[k].every(v=>finite(v,-10000,10000))));
@@ -158,8 +159,13 @@
          !finite(p.time,0,route.elapsed)||!finite(p.distance,0,route.distance))
         throw Error('扫描点的位置、时间或编号不正确。');
       ids.add(s.id);
-      return {id:s.id,capturedAt:s.capturedAt,
+      const copy={id:s.id,capturedAt:s.capturedAt,
         pose:{x:p.x,y:p.y,heading:p.heading,time:p.time,distance:p.distance},scan:cleanScan(s.scan)};
+      if(s.label!==undefined){
+        if(typeof s.label!=='string'||s.label.length>80)throw Error('扫描点名称不正确。');
+        copy.label=s.label;
+      }
+      return copy;
     });
   }
   function captureScan(route,scan,now=Date.now()){
@@ -195,9 +201,14 @@
       return {x:p.x,y:p.y,heading:p.heading,time:p.time,distance:p.distance,gap:p.gap};
     });
     const c=r.config;
-    return {x:r.x,y:r.y,heading:r.heading,distance:r.distance,elapsed:r.elapsed,originTime:r.originTime,
+    const copy={x:r.x,y:r.y,heading:r.heading,distance:r.distance,elapsed:r.elapsed,originTime:r.originTime,
       session:r.session,gaps:r.gaps,restarts:r.restarts,decimations:r.decimations,points,scans:cleanScans(r.scans,r),
       config:{diameter:c.diameter,cpr:c.cpr,track:c.track,wheelbase:c.wheelbase,confirmed:true,signs:c.signs.slice()}};
+    if(r.dataSource==='simulation'){
+      copy.dataSource='simulation';
+      copy.scans.forEach(s=>{s.scan.dataSource='simulation';});
+    }
+    return copy;
   }
   function routeRecord(route,now=Date.now()){
     return {format:'gimbal-route',version:2,savedAt:now,route:cleanRoute(route)};
@@ -311,18 +322,18 @@
   else document.body.appendChild(host);
   const canvas=$('map'),ctx=canvas.getContext('2d');
   let scale=85,center={x:0,y:0},follow=true,drag=null,dirty=true,lastPaint=0;
-  let historyRoute=null,saveDirectory=null,saving=false,opening=false;
+  let historyRoute=null,demoRoute=null,saveDirectory=null,saving=false,opening=false;
   let scanCapture=null,selectedScan=0,scanListRoute=null,scanListLength=-1;
-  const shownRoute=()=>historyRoute||engine;
+  const shownRoute=()=>historyRoute||demoRoute||engine;
   const fixed=(v,n=2)=>Number.isFinite(v)?v.toFixed(n):'--';
   function refresh() {
     const shown=shownRoute();
     const calibrated=validConfig(shown.config),live=shown.online;
     $('state').textContent=!live?'编码器数据离线':!calibrated?'数据在线 · 待确认轮向':'编码器估算中';
     if(historyRoute)$('state').textContent='已保存路线';
-    $('reset').disabled=$('apply').disabled=!!historyRoute;
+    $('reset').disabled=$('apply').disabled=!!historyRoute||!!demoRoute;
     $('liveRoute').hidden=!historyRoute;
-    $('saveScan').disabled=!!historyRoute||!scanCapture;
+    $('saveScan').disabled=!!historyRoute||!!demoRoute||!scanCapture;
     refreshScans(shown);
     $('state').className='tag'+(live&&calibrated?' live':'');
     $('distance').textContent=calibrated?fixed(shown.distance):'--';
@@ -337,12 +348,16 @@
     if(shown.gaps)note+=' 存在 '+shown.gaps+' 处数据缺口/异常：路线已分段，路程可能低估。';
     if(shown.restarts)note+=' 记录会话发生切换，可能是设备重启或数据源变化；切换前后路线不连接。';
     if(shown.decimations)note+=' 长路线已简化绘制点，累计路程保持。';
-    if(engine.nativeLog&&!historyRoute){
+    if(engine.nativeLog&&!historyRoute&&!demoRoute){
       $('state').textContent=engine.logPending?'路线同步中':live?'车端记录已同步':'路线连接中断';
       note=engine.logMessage+'。编码器估算，打滑仍会积累误差。';
       if(shown.gaps||shown.restarts)note+=' 存在 '+shown.gaps+' 处采样/缓存缺口、'+shown.restarts+' 次车端会话切换；缺失位置不作已知路线。';
     }
     if(historyRoute)note='已保存路线 · 编码器估算，不是绝对定位。';
+    if(shown.dataSource==='simulation'){
+      $('state').textContent=historyRoute?'模拟路线 · 已保存':'模拟数据 · 演示轨迹';
+      note='模拟数据：路线、轮速及扫描地貌由演示程序生成，不代表现场实测，也不向车辆发送指令。';
+    }
     $('note').textContent=note;
     dirty=true;
   }
@@ -354,7 +369,7 @@
       $('scanSelect').replaceChildren();
       const empty=document.createElement('option');empty.value='';empty.textContent=scans.length?'选择扫描点':'暂无扫描点';$('scanSelect').append(empty);
       scans.forEach(s=>{const option=document.createElement('option');option.value=String(s.id);
-        option.textContent='#'+s.id+' · '+new Date(s.capturedAt).toLocaleTimeString('zh-CN',{hour12:false})+' · '+s.scan.points.length+'点';$('scanSelect').append(option);});
+        option.textContent='#'+s.id+' · '+(s.label||new Date(s.capturedAt).toLocaleTimeString('zh-CN',{hour12:false}))+' · '+s.scan.points.length+'点';$('scanSelect').append(option);});
     }
     if(!scans.some(s=>s.id===selectedScan))selectedScan=0;
     $('scanSelect').value=selectedScan?String(selectedScan):'';
@@ -460,26 +475,26 @@
   $('export').onclick=()=>{
     const shown=shownRoute();
     if(!validConfig(shown.config)||!shown.points.length){$('note').textContent='尚无已标定轨迹可导出。';return;}
-    const lines=['# 编码器估算轨迹；x前方/y左方；缺口分段；不是绝对定位',
+    const lines=[shown.dataSource==='simulation'?'# 模拟数据；非现场实测；x前方/y左方':'# 编码器估算轨迹；x前方/y左方；缺口分段；不是绝对定位',
       '# 标定='+JSON.stringify(shown.config),
       '# 缺口='+shown.gaps+'; 重启='+shown.restarts+'; 绘制简化='+shown.decimations,
       'time_ms,x_m,y_m,heading_deg,distance_m,segment_start',
       ...shown.points.map(p=>[p.time,p.x.toFixed(5),p.y.toFixed(5),(p.heading*180/Math.PI).toFixed(3),p.distance.toFixed(5),p.gap?1:0].join(','))];
     const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
-    const a=document.createElement('a');a.href=url;a.download='巡检轨迹-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const a=document.createElement('a');a.href=url;a.download=(shown.dataSource==='simulation'?'模拟数据_巡检轨迹-':'巡检轨迹-')+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   $('saveRoute').onclick=async()=>{
     if(saving)return;
     let text;
     try{
       if(!validConfig(shownRoute().config)||!shownRoute().points.length)throw new Error('暂无已标定路线可保存。');
-      if(!historyRoute&&engine.nativeLog&&(engine.logPending||!engine.online||Date.now()-engine.lastReceived>1200))
+      if(!historyRoute&&!demoRoute&&engine.nativeLog&&(engine.logPending||!engine.online||Date.now()-engine.lastReceived>1200))
         throw new Error('路线尚未同步完成，请先停车并等待“车端记录已同步”后保存。');
       text=JSON.stringify(routeRecord(shownRoute()),null,2);
       if(new TextEncoder().encode(text).length>MAX_ROUTE_BYTES)throw Error('路线与扫描点超过20MB，请缩短本次记录。');
     }catch(e){$('routeFileStatus').textContent=e.message;return;}
     const suffix=root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Math.random().toString(36).slice(2);
-    const filename='路线_'+new Date().toISOString().replace(/[:.]/g,'-')+'_'+suffix+'.json';
+    const filename=(shownRoute().dataSource==='simulation'?'模拟数据_路线_':'路线_')+new Date().toISOString().replace(/[:.]/g,'-')+'_'+suffix+'.json';
     saving=true;$('saveRoute').disabled=true;let writable=null;
     try{
       if(typeof root.showDirectoryPicker==='function'){
@@ -513,6 +528,7 @@
   $('openRoute').onclick=()=>{$('routeFile').value='';$('routeFile').click();};
   $('routeFile').onchange=async()=>{
     const file=$('routeFile').files[0];if(!file||opening)return;
+    if(root.RoverDemo&&root.RoverDemo.enabled)root.RoverDemo.pause();
     opening=true;$('openRoute').disabled=true;$('liveRoute').disabled=true;
     try{
       if(file.size>MAX_ROUTE_BYTES)throw new Error('路线文件不能超过20MB。');
@@ -532,6 +548,25 @@
   requestAnimationFrame(paint);
   setInterval(()=>{engine.stale();refresh();},500);
   root.VehicleRoute={
+    presentDemo(route,bounds){
+      if(!root.RoverDemo||!root.RoverDemo.enabled||route.dataSource!=='simulation')return;
+      const firstDemo=!host.hasAttribute('data-demo');
+      demoRoute=route;historyRoute=null;host.setAttribute('data-demo','');
+      $('liveRoute').textContent='返回演示';
+      if(firstDemo){
+        const compact=document.createElement('style');compact.textContent='@media(min-width:1081px){:host-context(.demo-recording) header{padding:8px 16px}:host-context(.demo-recording) h2{font-size:17px;margin-bottom:1px}:host-context(.demo-recording) header p{font-size:11px}:host-context(.demo-recording) .files,:host-context(.demo-recording) .snapshots{padding:6px 12px}:host-context(.demo-recording) canvas{height:200px}:host-context(.demo-recording) .metrics{padding:10px;gap:6px}:host-context(.demo-recording) .total{font-size:27px}:host-context(.demo-recording) .wheels{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}:host-context(.demo-recording) .wheel{padding:4px;line-height:1.3}:host-context(.demo-recording) .wheel b{font-size:11px}:host-context(.demo-recording) .wheel span{font-size:9px}:host-context(.demo-recording) .row{font-size:11px}:host-context(.demo-recording) .metrics>p{display:none}:host-context(.demo-recording) .toolbar{padding:8px 12px}:host-context(.demo-recording) .note{padding:8px 12px}:host-context(.demo-recording) details{display:none}}';shadow.append(compact);
+        shadow.querySelector('header p').textContent='模拟行驶 · 五个停车扫描点 · 点击红点查看不同地貌';
+        shadow.querySelector('.metrics .divider+div>small').textContent='模拟四轮计数 / 转速';
+      }
+      if(bounds){
+        const r=canvas.getBoundingClientRect();center={x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2};
+        scale=Math.max(.1,Math.min((r.width-100)/Math.max(1,bounds.maxY-bounds.minY),(r.height-70)/Math.max(1,bounds.maxX-bounds.minX)));
+        follow=false;$('follow').textContent='跟随小车：关';$('follow').setAttribute('aria-pressed','false');
+      }
+      $('scanStatus').textContent='模拟扫描点 '+route.scans.length+' / 5 · 点击红点或选择编号查看点图。';
+      refresh();
+    },
+    openDemoScan(id){if(demoRoute)showScan(id);},
     setScanCapture(fn){scanCapture=fn;refresh();},
     feed(odo){
       if(engine.nativeLog){

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>云台三维扫描 · 巡检行驶轨迹 V8.12</title>
+  <title>云台三维扫描 · 巡检行驶轨迹 V8.14</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -35,26 +35,27 @@
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.12</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.14</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">风险判断</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
       <section class="panel scene-panel"><div class="scene-head"><strong>三维扫描空间</strong><span>拖动旋转视角 · 滚轮缩放</span></div><div id="scene" aria-label="可旋转的三维障碍物点云"><span class="corner tl">Y 高度<br>X 左右<br>Z 前方</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
       <aside class="panel side right"><div class="eyebrow">目标列表</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 800</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
     <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>前向截面</strong><span>横轴：0-150 cm · 近距离放大</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
-    <footer class="footer"><span>V8.12 · 仅显示 150 cm 内目标 · 气体数据来自 4MZ-HH4 · 距离单位为厘米</span><span id="update">更新于 --:--:--</span></footer>
+    <footer class="footer"><span>V8.14 · 仅显示 150 cm 内目标 · 气体数据来自 4MZ-HH4 · 距离单位为厘米</span><span id="update">更新于 --:--:--</span></footer>
   </main>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
   <!-- V8.9 / 2026-09-15: automatic route driving removed; save/open routes and scans retained. MCU V8.9/base V4.9; handheld V1.5/camera V1.2 unchanged. -->
-  <script src="three.min.js?v=8.12"></script>
-  <script src="OrbitControls.umd.js?v=8.12"></script>
-  <script src="gimbal-model.js?v=8.12"></script>
-  <script src="scan-snapshot.js?v=8.12"></script>
-  <script src="vehicle-route.js?v=8.12"></script>
-  <script src="route-log.js?v=8.12"></script>
-  <script src="wheel-speed-panel.js?v=8.12"></script>
-  <script src="camera-panel.js?v=8.12"></script>
+  <script src="three.min.js?v=8.14"></script>
+  <script src="OrbitControls.umd.js?v=8.14"></script>
+  <script src="gimbal-model.js?v=8.14"></script>
+  <script src="scan-snapshot.js?v=8.14"></script>
+  <script src="rover-demo.js?v=8.14"></script>
+  <script src="vehicle-route.js?v=8.14"></script>
+  <script src="route-log.js?v=8.14"></script>
+  <script src="wheel-speed-panel.js?v=8.14"></script>
+  <script src="camera-panel.js?v=8.14"></script>
   <script>
     const $ = id => document.getElementById(id), container=$('scene'), profile=$('profile'), pctx=profile.getContext('2d');
     const API_URL='http://192.168.4.1/api/telemetry';
@@ -126,7 +127,7 @@ function updateGas(gases) {
 }
     function targets(){const arr=[...points].sort((a,b)=>a.distance-b.distance).slice(0,3);$('targets').innerHTML=arr.map((p,i)=>`<div class="target ${p.distance<20?'danger':p.distance>=40?'safe':''}"><div class="target-head"><strong>目标 ${String(i+1).padStart(2,'0')}</strong><strong>${p.distance.toFixed(1)} cm</strong></div><small>方位 ${angle(p.yaw)} · 高度 ${Math.round(pitchProjection(p.distance,p.pitch).height)} cm</small></div>`).join('');}
     function drawProfile(){const r=profile.getBoundingClientRect(),dpr=Math.min(devicePixelRatio,2),w=Math.max(1,r.width),h=Math.max(1,r.height);profile.width=w*dpr;profile.height=h*dpr;pctx.setTransform(dpr,0,0,dpr,0,0);pctx.clearRect(0,0,w,h);const L=39,R=15,T=15,B=25,oy=(T+h-B)/2,pw=w-L-R,ph=(h-T-B)/2,x=d=>L+rangeRatio(d)*pw,y=v=>oy-heightRatio(v)*ph;pctx.font='11px Segoe UI';[0,20,40,60,100,150].forEach(v=>{pctx.strokeStyle='#304139';pctx.beginPath();pctx.moveTo(x(v),T);pctx.lineTo(x(v),h-B);pctx.stroke();pctx.fillStyle='#92a69a';pctx.fillText(v,x(v)-5,h-7);});[-90,-60,-30,0,30,60,90].forEach(v=>{const py=y(v);pctx.strokeStyle=v===0?'rgba(75,218,154,.7)':'#304139';pctx.beginPath();pctx.moveTo(L,py);pctx.lineTo(w-R,py);pctx.stroke();pctx.fillStyle='#92a69a';pctx.fillText(v,3,py+4);});points.forEach(p=>{const projection=pitchProjection(p.distance,p.pitch);pctx.beginPath();pctx.arc(x(projection.forward),y(projection.height),2.2,0,Math.PI*2);pctx.fillStyle=p.distance<20?'#ff6d6d':p.distance<40?'#f0b95b':'#4bda9a';pctx.fill();});if(!state.distanceValid||!state.link||state.distance>DISPLAY_RANGE_CM)return;const projection=pitchProjection(state.distance,state.pitch),currentColor=state.distance<20?'#ff6d6d':state.distance<40?'#f0b95b':'#4bda9a';pctx.strokeStyle='rgba(75,218,154,.62)';pctx.setLineDash([4,4]);pctx.beginPath();pctx.moveTo(x(projection.forward),oy);pctx.lineTo(x(projection.forward),y(projection.height));pctx.stroke();pctx.setLineDash([]);pctx.beginPath();pctx.arc(x(projection.forward),y(projection.height),4.2,0,Math.PI*2);pctx.fillStyle=currentColor;pctx.shadowColor=currentColor;pctx.shadowBlur=12;pctx.fill();pctx.shadowBlur=0;}
-    function addLog(text){logs.unshift(`<li><time>${clock()}</time>${text}</li>`);if(logs.length>6)logs.pop();$('log').innerHTML=logs.join('');}
+    function addLog(text){if(window.RoverDemo&&window.RoverDemo.enabled)text='模拟: '+text.replace('Wi-Fi: ','');logs.unshift(`<li><time>${clock()}</time>${text}</li>`);if(logs.length>6)logs.pop();$('log').innerHTML=logs.join('');}
     function update(frame){const yaw=Number(frame.roll),pitch=-Number(frame.pitch),distance=Number(frame.distance),distanceValid=frame.distanceValid===true&&Number.isFinite(distance),link=frame.link===true,inRange=distanceValid&&distance<=DISPLAY_RANGE_CM;if(!Number.isFinite(yaw)||!Number.isFinite(pitch))return;const danger=inRange&&distance<20,caution=inRange&&distance>=20&&distance<40,alarm=danger;Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm,distanceValid,link});yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(pitch);if(!inRange||!link)current.visible=beam.visible=false;$('yaw').textContent=link?angle(yaw):'-- deg';$('pitch').textContent=link?angle(pitch):'-- deg';$('update').textContent=`更新于 ${clock()} · 延迟 ${Number(frame.ageMs)||0} ms`;if(distanceValid){const height=pitchProjection(distance,pitch).height;$('distance').textContent=distance.toFixed(1);$('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';$('height').textContent=link?`${height>=0?'+':''}${height.toFixed(1)} cm`:'-- cm';$('raw').textContent=`${distance.toFixed(1)},${Math.round(yaw)},${Math.round(pitch)},${danger?1:0}`;$('status').textContent=!inRange?'范围外':danger?'报警':caution?'注意':'安全';$('statusDot').className=!inRange?'':danger?'danger':caution?'':'safe';$('sceneReadout').innerHTML=`${distance.toFixed(1)} cm<br>${!inRange?'仅显示150 cm内':link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;if(inRange&&link&&!paused&&frame.sequence!==lastSequence){addPoint(state);history.push(distance);if(history.length>30)history.shift();}}else{$('distance').textContent='--';$('echoText').textContent='未收到有效超声波回波';$('echoText').style.color='var(--muted)';$('height').textContent='-- cm';$('raw').textContent=`--,${Math.round(yaw)},${Math.round(pitch)},0`;$('status').textContent='无回波';$('statusDot').className='';$('sceneReadout').innerHTML=`无有效回波<br>${link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;}if(frame.sequence!==lastSequence&&Date.now()-lastLogAt>=900){lastLogAt=Date.now();addLog(distanceValid?`Wi-Fi: ${distance.toFixed(1)} cm · ${Math.round(yaw)}° · ${Math.round(pitch)}°`:'Wi-Fi: 超声波无有效回波');}lastSequence=frame.sequence;$('pointCount').textContent=`${points.length} / ${MAX_POINTS}`;$('pointFill').style.width=`${points.length/MAX_POINTS*100}%`;targets();drawProfile();}
     function resize(){const r=container.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();drawProfile();}
     function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);} window.addEventListener('resize',resize);resize();animate();
@@ -141,7 +142,22 @@ function updateGas(gases) {
       return {kind:'3d',points:savedPoints,view:{camera:camera.position.toArray(),target:controls.target.toArray()}};
     }
     window.VehicleRoute.setScanCapture(captureScan);
-    async function pollTelemetry(){if(polling||document.hidden)return;telemetryPollAt=Date.now();polling=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),800);try{const response=await fetch(`${API_URL}?t=${Date.now()}`,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP');const frame=await response.json();scanTelemetryOnline=frame.online===true&&frame.link===true&&Number.isFinite(Number(frame.roll))&&Number.isFinite(Number(frame.pitch));if(scanTelemetryOnline&&frame.sequence!==lastSequence)scanTelemetryAt=Date.now();if(window.VehicleRoute)window.VehicleRoute.feed(frame.odometry);if(window.WheelSpeedPanel)window.WheelSpeedPanel.feed(frame.wheelSpeed);updateGas(frame.gases);if(frame.online!==true){setConnectionState('offline');return;}setConnectionState(frame.link===true?'online':'handheld');update(frame);}catch(error){scanTelemetryOnline=false;if(window.VehicleRoute)window.VehicleRoute.disconnect();updateGas([]);setConnectionState('offline');}finally{clearTimeout(timeout);polling=false;}}
+    if(window.RoverDemo&&window.RoverDemo.enabled){
+      window.RoverDemo.attach({
+        clear:clearPointCloud,
+        point:addPoint,
+        view(){camera.position.set(460,330,600);controls.target.set(0,95,150);controls.update();},
+        frame(frame){
+          const recordingPaused=paused;paused=true;
+          try{scanTelemetryOnline=true;scanTelemetryAt=Date.now();updateGas(frame.gases);setConnectionState('online');update(frame);}
+          finally{paused=recordingPaused;}
+        }
+      });
+      const liveLink=new URL(location.href);liveLink.searchParams.delete('demo');
+      $('demo-launch').href=liveLink.href;$('demo-launch').textContent='退出演示';
+      window.RoverDemo.initialize();
+    }
+    async function pollTelemetry(){if((window.RoverDemo&&window.RoverDemo.enabled)||polling||document.hidden)return;telemetryPollAt=Date.now();polling=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),800);try{const response=await fetch(`${API_URL}?t=${Date.now()}`,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP');const frame=await response.json();scanTelemetryOnline=frame.online===true&&frame.link===true&&Number.isFinite(Number(frame.roll))&&Number.isFinite(Number(frame.pitch));if(scanTelemetryOnline&&frame.sequence!==lastSequence)scanTelemetryAt=Date.now();if(window.VehicleRoute)window.VehicleRoute.feed(frame.odometry);if(window.WheelSpeedPanel)window.WheelSpeedPanel.feed(frame.wheelSpeed);updateGas(frame.gases);if(frame.online!==true){setConnectionState('offline');return;}setConnectionState(frame.link===true?'online':'handheld');update(frame);}catch(error){scanTelemetryOnline=false;if(window.VehicleRoute)window.VehicleRoute.disconnect();updateGas([]);setConnectionState('offline');}finally{clearTimeout(timeout);polling=false;}}
     $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'继续记录':'暂停记录';addLog(paused?'点云记录已暂停':'点云记录已继续');});$('clearPoints').addEventListener('click',clearPointCloud);$('connect').addEventListener('click',pollTelemetry);setConnectionState('offline');pollTelemetry();setInterval(pollTelemetry,80);
   </script>
 </body>

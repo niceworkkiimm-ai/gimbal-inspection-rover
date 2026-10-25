@@ -36,6 +36,7 @@
     if(!data.valid)note+=' 本次反馈采样无效。';
     if(data.fault){const causes=[];if(data.fault&1)causes.push('采样超时');if(data.fault&2)causes.push('计数跳变');if(data.fault&4)causes.push('反馈反向');if(data.fault&8)causes.push('持续无脉冲/可能堵转');note+=' 异常：'+causes.join('、')+'，涉及轮子 '+names.filter((_,i)=>data.faultWheels&(1<<i)).join(' / ')+'。故障记录保留至下次路线上传；请先排查再重试。';}
     if(data.limited)note+=' 部分轮子达到30% PWM上限，不保证已经达到目标转速。';
+    if(root.RoverDemo&&root.RoverDemo.enabled){$('state').textContent='模拟数据 · 四轮转速';note='模拟数据：转速与PWM为演示程序生成，不来自编码器，不会控制电机。';}
     $('note').textContent=note;$('note').className='note'+(data.fault?' error':'');
   }
   root.WheelSpeedPanel={feed(d){
@@ -48,8 +49,9 @@
     render();
   }};
   $('export').onclick=()=>{
-    const lines=['# 轮速诊断；PWM为逻辑命令，不是电流或驱动执行确认。','time,closed_loop,fault,fault_wheels,sample_ms,rpm1,rpm2,rpm3,rpm4,target1,target2,target3,target4,pwm1,pwm2,pwm3,pwm4',...history.map(p=>[new Date(p.at).toISOString(),p.enabled?1:0,p.fault,p.faultWheels,p.sampleMs,...p.rpm,...(p.target||['','','','']),...p.pwm].join(','))];
-    const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='四轮诊断-'+Date.now()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const simulated=root.RoverDemo&&root.RoverDemo.enabled;
+    const lines=[simulated?'# 模拟数据；轮速与PWM由演示程序生成，非实测。':'# 轮速诊断；PWM为逻辑命令，不是电流或驱动执行确认。','time,closed_loop,fault,fault_wheels,sample_ms,rpm1,rpm2,rpm3,rpm4,target1,target2,target3,target4,pwm1,pwm2,pwm3,pwm4',...history.map(p=>[new Date(p.at).toISOString(),p.enabled?1:0,p.fault,p.faultWheels,p.sampleMs,...p.rpm,...(p.target||['','','','']),...p.pwm].join(','))];
+    const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=(simulated?'模拟数据_四轮诊断-':'四轮诊断-')+Date.now()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   new ResizeObserver(draw).observe($('chart'));setInterval(render,500);draw();
 })(window);

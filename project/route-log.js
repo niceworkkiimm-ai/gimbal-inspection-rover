@@ -117,7 +117,7 @@
   const api={Reader,Client,validate,CONFIG_CRC};
   if(typeof module==='object'&&module.exports)module.exports=api;
   root.RouteLogCore=api;
-  if(root.VehicleRoute&&typeof document!=='undefined'){
+  if(root.VehicleRoute&&typeof document!=='undefined'&&!(root.RoverDemo&&root.RoverDemo.enabled)){
     const v=root.VehicleRoute;v.enableLog();
     const client=new Client(v.engine,{changed:v.refresh,fallback:v.legacyLog});
     root.RouteLogClient=client;client.start();
