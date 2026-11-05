@@ -1,5 +1,7 @@
 # 项目协作约定
 
+接手先读 [项目与开发对话交接](docs/AI_HANDOFF.md) 和 [README](README.md)，用 `.local/config.json` 核对原工程。
+
 - 当前仓库是独立的巡检小车项目，不属于 gongchuang-car。
 - 原工作工程的位置保存在未跟踪的 `.local/config.json` 中。未经用户授权，不移动或改写原工程。
 - `project/` 为受控同步副本；业务修改先在用户指定的原工程完成并验证，再通过 `tools/project_sync.py publish --message "具体修改说明"` 同步、检查、提交、推送。不要直接编辑受控副本后再强制覆盖。

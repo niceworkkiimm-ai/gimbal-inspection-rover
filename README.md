@@ -4,7 +4,7 @@
 
 这是嵌入式比赛与学习工程。超声波点图是有限角度、有限分辨率的测距可视化，编码器路线会受打滑与标定误差影响。没有宣称激光雷达级建图、SLAM、矿用认证或可靠自主导航；自动按保存路线行驶功能已在 V8.9 移除。
 
-**新 AI / 新成员接手请先看 [工程与开发对话摘要](docs/AI_HANDOFF.md)**：包含当前架构、阅读顺序、重要历史决定、已解决问题、暂缓建议、用户偏好和可复制的交接提示词。
+**新 AI / 新成员接手请先看 [工程与开发对话摘要](docs/AI_HANDOFF.md)**：包含本机资料路径、当前版本、开发对话、待排查问题、修改与发布步骤及交接提示词。
 
 ## 当前版本与入口
 
@@ -78,7 +78,7 @@
 
 ## 本地原工程 → D 盘仓库 → GitHub
 
-原工作工程保持原位置；这个仓库是经过公开脱敏的同步副本。原工程路径、工具路径和同步清单只存放在未跟踪的 `.local/` 中。
+原工作工程保持原位置；这个仓库是经过公开脱敏的同步副本。运行时使用的原工程路径、工具路径和同步清单保存在未跟踪的 `.local/` 中。本机路径见 [交接说明](docs/AI_HANDOFF.md#9-本机位置与发布范围)。
 
 - 本地 Git 仓库：`D:\嵌入式Git仓库\gimbal-inspection-rover`。
 - 覆盖前的差异备份：`D:\嵌入式Git备份\gimbal-inspection-rover`；只备份同步中实际被替换/删除的已管理文件，首次导入无旧文件时不重复备份。
@@ -98,7 +98,7 @@ python -B tools/project_sync.py validate
 python -B tools/project_sync.py publish --message "fix: 描述本次已验证的具体修改"
 ```
 
-网页现有快照测试也可单独执行：`node project/tests/route-snapshot.test.cjs`。
+网页测试可单独执行 `node project/tests/route-snapshot.test.cjs` 和 `node project/tests/rover-demo.test.cjs`。
 
 ## 验证边界和版权
 
