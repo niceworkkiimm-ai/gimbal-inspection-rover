@@ -1,5 +1,5 @@
 /*
- * ESP32-CAM（ESP-32S）独立车载图传 V1.3 / 2026-10-25，配套2D/3D网页 V8.12。
+ * ESP32-CAM（ESP-32S）独立车载图传 V1.4 / 2026-11-10，配套2D/3D网页 V8.15。
  * 完整接线/参数见 CameraConfig.h 和项目根目录 V8.4_ESP32-CAM烧录与接线.md。
  * 只供电并连接 GimbalCtrl；不连接STM32串口，不转发视频经过基座HTTP。
  * 共用ESP8266热点无线带宽，不能保证零延迟；本固件不含任何车辆控制接口。
@@ -24,6 +24,14 @@ static char bootId[9] = {};
 static char viewerId[65] = {};
 static uint32_t viewerSeenMs = 0, previousCaptureMs = 0;
 static bool haveCapture = false;
+static bool weakSignal = false, liteQuality = false;
+
+static bool wantsLite(httpd_req_t *req) {
+  char query[160], value[4];
+  return httpd_req_get_url_query_str(req,query,sizeof(query))==ESP_OK &&
+         httpd_query_key_value(query,"lite",value,sizeof(value))==ESP_OK &&
+         strcmp(value,"1")==0;
+}
 
 static void setHeaders(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
@@ -31,7 +39,7 @@ static void setHeaders(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
   httpd_resp_set_hdr(req, "Access-Control-Allow-Private-Network", "true");
   httpd_resp_set_hdr(req, "Access-Control-Expose-Headers",
-                    "X-Frame-Id, X-Frame-Age-Ms, X-Camera-Version");
+                    "X-Frame-Id, X-Frame-Age-Ms, X-Camera-Version, X-Camera-Profile");
   httpd_resp_set_hdr(req, "Cache-Control", "no-store, max-age=0");
   httpd_resp_set_hdr(req, "X-Camera-Version", CAMERA_API_VERSION);
 }
@@ -64,11 +72,21 @@ static esp_err_t captureHandler(httpd_req_t *req) {
   if (viewerId[0] && strcmp(viewerId, incoming) != 0 &&
       uint32_t(now - viewerSeenMs) < CAMERA_VIEWER_LEASE_MS)
     return textResponse(req, "409 Conflict", "Another viewer is active. Close it and wait 3 seconds.");
-  if (haveCapture && uint32_t(now - previousCaptureMs) < CAMERA_MIN_INTERVAL_MS)
+  const int32_t rssi=WiFi.RSSI();
+  if (rssi<0 && rssi<=-75) weakSignal=true;
+  else if (rssi>=-68 && rssi<0) weakSignal=false;
+  const bool lite=weakSignal || wantsLite(req);
+  const unsigned interval=lite ? CAMERA_LITE_INTERVAL_MS : CAMERA_MIN_INTERVAL_MS;
+  if (haveCapture && uint32_t(now - previousCaptureMs) < interval)
     return textResponse(req, "429 Too Many Requests", "Camera capture rate limit; retry shortly.");
   strlcpy(viewerId, incoming, sizeof(viewerId));
   viewerSeenMs = previousCaptureMs = now;
   haveCapture = true;
+  if (lite!=liteQuality) {
+    sensor_t *sensor=esp_camera_sensor_get();
+    if (sensor && sensor->set_quality(sensor,lite ? CAMERA_LITE_JPEG_QUALITY : CAMERA_JPEG_QUALITY)==0)
+      liteQuality=lite;
+  }
   camera_fb_t *fb = nullptr;
   int64_t ageMs = 0;
   for (int attempt = 0; attempt < 2; ++attempt) {
@@ -89,6 +107,7 @@ static esp_err_t captureHandler(httpd_req_t *req) {
   httpd_resp_set_type(req, "image/jpeg");
   httpd_resp_set_hdr(req, "X-Frame-Id", frameId);
   httpd_resp_set_hdr(req, "X-Frame-Age-Ms", age);
+  httpd_resp_set_hdr(req, "X-Camera-Profile", lite ? "lite" : "normal");
   const esp_err_t result = httpd_resp_send(req, reinterpret_cast<const char *>(fb->buf), fb->len);
   esp_camera_fb_return(fb);
   return result;
@@ -193,14 +212,18 @@ void setup() {
   WiFi.setSleep(false);
   Serial.printf("Connecting to %s (2.4 GHz, DHCP)...\n", CAMERA_WIFI_SSID);
   // 状态页即使摄像头初始化失败也启动，便于区分WiFi与排线/PSRAM故障。
-  if (!startServer()) Serial.println("ERROR: HTTP server start failed; press RESET to retry.");
+  if (!startServer()) Serial.println("ERROR: HTTP server start failed; will retry after WiFi connects.");
 }
 
 void loop() {
   static bool wasConnected = false, mdnsStarted = false;
-  static uint32_t retryAt = 0;
+  static uint32_t retryAt = 0, serverRetryAt = 0;
   const bool connected = WiFi.status() == WL_CONNECTED;
   const uint32_t now = millis();
+  if (connected && !cameraServer && uint32_t(now-serverRetryAt)>=3000) {
+    serverRetryAt=now;
+    if (startServer()) Serial.println("Camera HTTP recovered.");
+  }
   if (connected && !wasConnected) {
     if (mdnsStarted) MDNS.end();
     mdnsStarted = MDNS.begin(CAMERA_HOSTNAME);

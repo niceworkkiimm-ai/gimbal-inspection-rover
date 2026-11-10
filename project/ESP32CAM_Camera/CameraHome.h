@@ -1,5 +1,5 @@
 #pragma once
-// V1.3：10/5/3帧选项，相对V1.2旋转180度已由摄像头完成。默认关闭，不控制小车。
+// V1.4：默认5帧，弱链路降负载，清空旧帧后自动重试。
 static const char CAMERA_HOME[] PROGMEM = R"CAMERAHTML(<!doctype html>
 <html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>嵌入电团队 · 车载画面</title>
@@ -11,14 +11,14 @@ select{font:inherit;padding:10px;border:1px solid #395548;border-radius:8px;back
 button:first-child{background:#54da9d;color:#102419;font-weight:600}.view{margin:18px 0;background:#080f0b;aspect-ratio:4/3;border:1px solid #395548;border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden}
 img{width:100%;height:100%;object-fit:contain}img[hidden]{display:none}#empty{position:absolute;padding:20px;text-align:center;color:#a7b8af}#status{min-height:48px}
 small{color:#9eb6a7}a{color:#54da9d}</style>
-<main><h1>嵌入电团队 · 车载画面</h1><p>320 × 240 · 最高约 10 帧/秒 · 摄像头 V1.3 · ESP32-CAM</p>
-<div><button id="start">开启画面</button> <button id="stop" disabled>关闭画面</button> <label>帧率 <select id="rate" aria-label="视频帧率"><option value="10">10 帧/秒</option><option value="5">5 帧/秒</option><option value="3">3 帧/秒</option></select></label></div>
+<main><h1>嵌入电团队 · 车载画面</h1><p>320 × 240 · 最高约 10 帧/秒 · 摄像头 V1.4 · ESP32-CAM</p>
+<div><button id="start">开启画面</button> <button id="stop" disabled>关闭画面</button> <label>帧率 <select id="rate" aria-label="视频帧率"><option value="10">10 帧/秒</option><option value="5" selected>5 帧/秒</option><option value="3">3 帧/秒</option></select></label></div>
 <div class="view"><img id="frame" alt="小车前方摄像头画面" hidden><span id="empty">画面未开启</span></div>
 <div id="status" role="status">只显示摄像头，不发送车辆控制指令。</div>
 <small>只在一个窗口开启视频。遥控变卡先停车，再降至5或3帧。切到其他页面会关闭收图。画面中断请立即停止驾驶；画面延迟不等于遥控链路延迟。</small></main>
 <script>
 const el=id=>document.getElementById(id);
-let active=false,generation=0,controller=null,timer=0,objectUrl='',lastId='',lastAt=0;
+let active=false,generation=0,controller=null,timer=0,objectUrl='',lastId='',lastAt=0,failures=0,liteUntil=0;
 function clearFrame(text){el('frame').hidden=true;el('frame').removeAttribute('src');if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl='';el('empty').hidden=false;el('empty').textContent=text;}
 function stop(text='画面已关闭'){active=false;generation++;clearTimeout(timer);if(controller)controller.abort();controller=null;clearFrame(text);el('status').textContent=text;el('start').disabled=false;el('stop').disabled=true;el('rate').disabled=false;}
 async function poll(g,viewer){
@@ -26,9 +26,9 @@ async function poll(g,viewer){
  const began=performance.now(),abort=new AbortController();controller=abort;const deadline=setTimeout(()=>abort.abort(),1200);
  let pending='';
  try{
-  const r=await fetch('/capture?viewer='+viewer+'&t='+Date.now(),{cache:'no-store',signal:abort.signal});
-  if(r.status===429){if(active&&g===generation)timer=setTimeout(()=>poll(g,viewer),250);return;}
-  if(r.status===409)throw Error('已有其他窗口收图，请先关闭它，等3秒再试。');
+  const r=await fetch('/capture?viewer='+viewer+'&lite='+(began<liteUntil?'1':'0')+'&t='+Date.now(),{cache:'no-store',signal:abort.signal});
+  if(r.status===429){if(active&&g===generation)timer=setTimeout(()=>poll(g,viewer),350);return;}
+  if(r.status===409){stop('已有其他窗口收图，请先关闭它，等3秒再试。');return;}
   if(!r.ok)throw Error('摄像头响应 '+r.status+'，请查看串口日志或 /status。');
   if(r.headers.get('X-Camera-Version')!=='1.0')throw Error('摄像头固件版本不匹配');
   const id=r.headers.get('X-Frame-Id'),ageText=r.headers.get('X-Frame-Age-Ms'),age=ageText===null?NaN:Number(ageText);
@@ -37,15 +37,26 @@ async function poll(g,viewer){
   pending=URL.createObjectURL(blob);const probe=new Image();probe.src=pending;await probe.decode();
   if(!active||g!==generation)return;
   if(abort.signal.aborted)throw Error('收图超时');
-  if(performance.now()-began>1000)throw Error('收图耗时过长');
+  if(age+performance.now()-began>1000)throw Error('收到的画面已超过 1 秒');
   if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=pending;pending='';
   el('frame').src=objectUrl;el('frame').hidden=false;el('empty').hidden=true;lastId=id;lastAt=performance.now();
-  el('status').textContent='持续收图 · 本次收图 '+Math.round(lastAt-began)+' ms（不是端到端延迟）';
-  timer=setTimeout(()=>poll(g,viewer),Math.max(Math.max(105,1000/Number(el('rate').value))-(performance.now()-began),0));
- }catch(e){if(g===generation)stop('画面中断，先停止驾驶。'+e.message);}
+  failures=0;
+  const elapsed=lastAt-began;
+  if(elapsed>350)liteUntil=lastAt+12000;
+  const lite=r.headers.get('X-Camera-Profile')==='lite'||lastAt<liteUntil;
+  el('status').textContent='持续收图 · 本次收图 '+Math.round(elapsed)+' ms'+(lite?' · 省带宽':'');
+  timer=setTimeout(()=>poll(g,viewer),Math.max(Math.max(lite?350:105,1000/Number(el('rate').value))-elapsed,0));
+ }catch(e){
+  if(active&&g===generation){
+   clearFrame('画面中断，请停止驾驶');
+   el('status').textContent='正在自动重连 · '+e.message;
+   liteUntil=performance.now()+12000;
+   timer=setTimeout(()=>poll(g,viewer),Math.min(3000,350*(2**Math.min(failures++,4))));
+  }
+ }
  finally{clearTimeout(deadline);if(pending)URL.revokeObjectURL(pending);if(controller===abort)controller=null;}
 }
-el('start').onclick=()=>{stop();active=true;lastId='';lastAt=0;el('start').disabled=true;el('stop').disabled=false;el('rate').disabled=true;el('status').textContent='正在连接…';clearFrame('等待新画面');const viewer=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');poll(generation,viewer);};
+el('start').onclick=()=>{stop();active=true;lastId='';lastAt=0;failures=0;liteUntil=0;el('start').disabled=true;el('stop').disabled=false;el('rate').disabled=true;el('status').textContent='正在连接…';clearFrame('等待新画面');const viewer=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');poll(generation,viewer);};
 el('stop').onclick=()=>stop();
 setInterval(()=>{if(active&&lastAt&&performance.now()-lastAt>1000){clearFrame('画面过期，请停止驾驶');el('status').textContent='画面过期，等待新帧';}},200);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stop('页面已隐藏，画面关闭；返回后请重新开启。');});

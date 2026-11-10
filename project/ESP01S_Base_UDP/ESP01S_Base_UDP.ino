@@ -1,10 +1,11 @@
 #include "secrets.h"
 /*
- * 固件版本: V4.9
- * 当前接线补充（STM32 V8.10 / 2026-09-19）：ESP TX->PC11(UART4_RX)，RX->PC10(UART4_TX)。
+ * 固件版本: V4.10
+ * 当前接线（STM32 V8.13）：ESP TX->PA3(USART2_RX)，RX->PA2(USART2_TX)。
  * 原PA9/PA10信号线撤掉；VCC/EN稳定3.3V、GND共地不变；115200/8N1不变。
- * 本次只重烧STM32，此ESP固件执行代码/版本不变；下方旧PA9/PA10条目是历史说明。
- * 更新日期: 2026-09-15
+ * 本次需重烧基座 ESP；下方旧串口条目为历史。
+ * 更新日期: 2026-11-10
+ * V4.10：HTTP 分段处理，让手持 UDP 和串口持续得到服务，并提供链路诊断。
  * V4.9：删除自动按路线行驶R1/R2接口，旧/api/route返回410；路线记录/保存补传与手持转发保留，接线不变。
  * V4.8：配套STM32 V8.0；串口忙时保留最新手持帧、扩充接收缓存、减少跨域预检，路线接口返回具体反馈故障。接线不变。
  * V4.7：配套STM32 V7.8，只读路线缓存补传；完整批次校验，不新增引脚或驾驶命令。
@@ -30,7 +31,7 @@
  *   - /api/telemetry增加CH4、O2、CO、H2S浓度、状态、温湿度数据
  */
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
+#include "CooperativeHttp.h"
 #include <WiFiUdp.h>
 #include "HandheldProtocol.h"
 #include "EncoderProtocol.h"
@@ -155,7 +156,7 @@ struct Telemetry {
 };
 
 WiFiUDP udp;
-ESP8266WebServer server(80);
+CooperativeHttp server(80);
 Telemetry telemetry = {0, 0, 0, -10, false, false, false, 0};
 GasReading gasReadings[4] = {};
 char udpPacket[kUdpPacketCapacity];
@@ -196,7 +197,7 @@ footer{min-height:48px;padding:0 20px;display:flex;align-items:center;justify-co
 <body>
 <div class="shell">
 <header class="topbar">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.9</span></p></div></div>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.10</span></p></div></div>
   <div id="state" class="state" data-online="false"><i aria-hidden="true"></i><span>等待基座数据</span></div>
 </header>
 <main>
@@ -299,16 +300,9 @@ setInterval(update,500);update();
 </html>
 )HTML";
 
-void addCorsHeaders() {
-  server.sendHeader("Access-Control-Allow-Origin", "*");
-  server.sendHeader("Access-Control-Allow-Private-Network", "true");
-  server.sendHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-}
-
 #include "RouteLogBridge.h"
 // Explicitly reject cached old pages; this endpoint cannot enqueue motor commands.
 void sendRouteRemoved(){
-  addCorsHeaders();
   server.send(410,"application/json; charset=utf-8",
     "{\"error\":\"route_drive_removed\",\"message\":\"自动按路线行驶已删除，保存和打开路线仍可使用\"}");
 }
@@ -421,11 +415,16 @@ bool parseGasLine(const char *line) {
   return true;
 }
 
+// Gap measured at UART enqueue, not at the motor.
+uint32_t lastUdpAt=0, lastForwardAt=0, maxForwardGapMs=0, skippedUdp=0;
+bool haveUdp=false, haveForwarded=false;
+
 void sendTelemetryJson() {
   const uint32_t now = millis();
   bool online = telemetry.received && now - telemetry.receivedAtMs <= kTelemetryTimeoutMs;
   // One bounded static response buffer; avoid large nested stack buffers on ESP.
-  static char json[4800];
+  char *json=server.responseBuffer();
+  constexpr size_t capacity=CooperativeHttp::responseCapacity;
   char roll[16], pitch[16], distance[16], concentration[24], carJson[200];
   bool carOnline=vehicle.received&&now-vehicle.receivedAtMs<=kTelemetryTimeoutMs;
   snprintf(carJson,sizeof(carJson),"{\"online\":%s,\"mode\":%u,\"state\":%u,\"pwm\":[%d,%d,%d,%d]}",
@@ -436,50 +435,44 @@ void sendTelemetryJson() {
   formatTenths(pitch, sizeof(pitch), telemetry.pitchTenths);
   if (online && telemetry.distanceValid) formatTenths(distance, sizeof(distance), telemetry.distanceTenths);
   else strcpy(distance, "null");
-  int count = snprintf(json, sizeof(json),
-    "{\"gasProtocol\":2,\"sequence\":%lu,\"roll\":%s,\"pitch\":%s,\"distance\":%s,\"distanceValid\":%s,\"link\":%s,\"online\":%s,\"vehicle\":%s,\"gases\":[",
+  int count = snprintf(json, capacity,
+    "{\"gasProtocol\":2,\"sequence\":%lu,\"roll\":%s,\"pitch\":%s,\"distance\":%s,\"distanceValid\":%s,\"link\":%s,\"online\":%s,\"ageMs\":%lu,\"handheldUdpOnline\":%s,\"maxForwardGapMs\":%lu,\"skippedUdp\":%lu,\"vehicle\":%s,\"gases\":[",
     (unsigned long)telemetry.sequence, roll, pitch, distance,
     online && telemetry.distanceValid ? "true" : "false",
-    online && telemetry.link ? "true" : "false", online ? "true" : "false", carJson);
-  size_t used = count > 0 ? (size_t)count : sizeof(json);
-  for (unsigned i = 0; i < 4 && used < sizeof(json); ++i) {
+    online && telemetry.link ? "true" : "false", online ? "true" : "false",
+    (unsigned long)(online ? now-telemetry.receivedAtMs : 0),
+    haveUdp && now-lastUdpAt<=250U ? "true" : "false",
+    (unsigned long)maxForwardGapMs,(unsigned long)skippedUdp,carJson);
+  size_t used = count > 0 ? (size_t)count : capacity;
+  for (unsigned i = 0; i < 4 && used < capacity; ++i) {
     const GasReading &gas = gasReadings[i];
     bool gasOnline = gas.received && gas.moduleOnline && now - gas.receivedAtMs <= kGasTimeoutMs;
     bool valid = gasOnline && gas.valid;
     formatScaled(concentration, sizeof(concentration), gas.concentrationRaw, gas.decimals);
     const char *statusText = !gasOnline ? "未连接 / 无新数据" :
       gas.status == 1 && !valid ? "单位或精度编码异常" : gasStatusText(gas.status);
-    count = snprintf(json + used, sizeof(json) - used,
+    count = snprintf(json + used, capacity - used,
       "%s{\"channel\":%u,\"name\":\"%s\",\"valid\":%s,\"online\":%s,\"concentration\":%s,\"concentrationRaw\":%lu,\"unitCode\":%u,\"unit\":\"%s\",\"decimals\":%u,\"status\":%u,\"statusText\":\"%s\",\"severity\":\"%s\",\"gasType\":%u,\"temperature\":null,\"humidity\":null}",
       i ? "," : "", i + 1, gas.received ? gasName(gas.gasType) : "待识别气体",
       valid ? "true" : "false", gasOnline ? "true" : "false",
       valid ? concentration : "null", (unsigned long)gas.concentrationRaw,
       gas.unitCode, gasUnit(gas.unitCode), gas.decimals, gas.status, statusText,
       gasOnline ? gasSeverity(gas.status, valid) : "offline", gas.gasType);
-    if (count < 0 || (size_t)count >= sizeof(json) - used) { used = sizeof(json); break; }
+    if (count < 0 || (size_t)count >= capacity - used) { used = capacity; break; }
     used += (size_t)count;
   }
-  addCorsHeaders();
-  if (used + 3 > sizeof(json)) {
+  if (used + 3 > capacity) {
     server.send(500, "application/json", "{\"error\":\"telemetry_overflow\"}");
     return;
   }
   json[used++]=']';json[used]=0;
-  used=appendEncoderJson(json,used,sizeof(json),now);
-  used=appendWheelSpeedJson(json,used,sizeof(json),now);
-  if(used+2>sizeof(json)){
+  used=appendEncoderJson(json,used,capacity,now);
+  used=appendWheelSpeedJson(json,used,capacity,now);
+  if(used+2>capacity){
     server.send(500,"application/json","{\"error\":\"telemetry_overflow\"}");return;
   }
   strcpy(json+used,"}");
   server.send(200, "application/json; charset=utf-8", json);
-}
-
-void sendOptions() {
-  addCorsHeaders();
-  server.sendHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  server.sendHeader("Access-Control-Allow-Headers", "Content-Type, X-Route-Token");
-  server.sendHeader("Access-Control-Max-Age", "600");
-  server.send(204, "text/plain", "");
 }
 
 bool parseTelemetryLine(const char *line) {
@@ -548,7 +541,13 @@ void forwardHandheldUdp() {
     if(packetSize<=0) {
       if(queued) {
         char line[64];int n=HH_Format(line,sizeof(line),&newest);
-        if(n>0&&Serial.availableForWrite()>=n){Serial.write((const uint8_t*)line,n);queued=false;}
+        if(n>0&&Serial.availableForWrite()>=n){
+          Serial.write((const uint8_t*)line,n);
+          const uint32_t sentAt=millis();
+          if(haveForwarded && sentAt-lastForwardAt>maxForwardGapMs)
+            maxForwardGapMs=sentAt-lastForwardAt;
+          lastForwardAt=sentAt;haveForwarded=true;queued=false;
+        }
       }
       return;
     }
@@ -562,14 +561,16 @@ void forwardHandheldUdp() {
       if(ip!=sourceIp)continue;
       uint32_t delta=candidate.sequence-lastSequence;
       if(!delta||delta>=0x80000000U)continue;
+      skippedUdp+=delta-1U;
     }
+    lastUdpAt=millis();haveUdp=true;
     sourceKnown=true;sourceIp=ip;lastSequence=candidate.sequence;lastAt=millis();
     newest=candidate;queued=true;
   }
   // If more remain, defer transmission until the next drained batch.
 }
 
-void sendControlPage() { server.send_P(200, "text/html; charset=utf-8", kControlPage); }
+void sendControlPage() { server.sendPage(kControlPage, sizeof(kControlPage)-1); }
 
 void sendScanCommand() {
   String mode = server.arg("mode");
@@ -580,14 +581,27 @@ void sendScanCommand() {
   else if (mode == "all") { command = "M,ALL\n"; message = "全方位扫描已启动"; }
   else if (mode == "stop") { command = "M,STOP\n"; message = "停车与停止扫描指令已发送，请核对主控状态"; }
   else if (mode == "handheld") { command = "M,HANDHELD\n"; message = "已恢复体感控制"; }
-  else { addCorsHeaders(); server.send(400, "application/json; charset=utf-8", "{\"ok\":false,\"message\":\"无效模式\"}"); return; }
+  else { server.send(400, "application/json; charset=utf-8", "{\"ok\":false,\"message\":\"无效模式\"}"); return; }
   if(Serial.availableForWrite()<(int)strlen(command)){
-    addCorsHeaders();server.send(503,"application/json","{\"ok\":false,\"message\":\"串口忙，请重试\"}");return;
+    server.send(503,"application/json","{\"ok\":false,\"message\":\"串口忙，请重试\"}");return;
   }
   Serial.write((const uint8_t *)command, strlen(command));
-  addCorsHeaders();
   String body = String("{\"ok\":true,\"message\":\"") + message + "\"}";
   server.send(200, "application/json; charset=utf-8", body);
+}
+
+void handleHttp(const char *method,const char *path) {
+  const bool get=!strcmp(method,"GET");
+  if (!strcmp(method,"OPTIONS") &&
+      (!strcmp(path,"/api/telemetry") || !strcmp(path,"/api/scan") ||
+       !strcmp(path,"/api/route") || !strcmp(path,"/api/route-log"))) {
+    server.send(204,"text/plain","");
+  } else if (get && !strcmp(path,"/")) sendControlPage();
+  else if (get && !strcmp(path,"/api/telemetry")) sendTelemetryJson();
+  else if (get && !strcmp(path,"/api/scan")) sendScanCommand();
+  else if (get && !strcmp(path,"/api/route-log")) sendJournal();
+  else if ((get || !strcmp(method,"POST")) && !strcmp(path,"/api/route")) sendRouteRemoved();
+  else server.send(404,"application/json","{\"error\":\"not_found\"}");
 }
 
 }  // namespace
@@ -602,17 +616,6 @@ void setup() {
   encoderBoot=ESP.getCycleCount();
   journalClient=ESP.random();if(!journalClient)journalClient=1;
   udp.begin(kUdpPort);
-  server.on("/", HTTP_GET, sendControlPage);
-  server.on("/api/telemetry", HTTP_GET, sendTelemetryJson);
-  server.on("/api/telemetry", HTTP_OPTIONS, sendOptions);
-  server.on("/api/scan", HTTP_GET, sendScanCommand);
-  server.on("/api/scan", HTTP_OPTIONS, sendOptions);
-  server.on("/api/route",HTTP_GET,sendRouteRemoved);
-  server.on("/api/route",HTTP_POST,sendRouteRemoved);
-  server.on("/api/route",HTTP_OPTIONS,sendOptions);
-  server.on("/api/route-log",HTTP_GET,sendJournal);
-  server.on("/api/route-log",HTTP_OPTIONS,sendOptions);
-  server.onNotFound([]() { addCorsHeaders(); server.send(404, "application/json", "{\"error\":\"not_found\"}"); });
   server.begin();
 }
 
@@ -626,7 +629,7 @@ void loop() {
   if(encoderFresh&&now-encoderAt>kTelemetryTimeoutMs)encoderFresh=false;
   forwardHandheldUdp();
   readStm32Telemetry();
-  server.handleClient();
+  server.poll(handleHttp);
   forwardHandheldUdp();
   readStm32Telemetry();
   yield();

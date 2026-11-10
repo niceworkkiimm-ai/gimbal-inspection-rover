@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>二维云台雷达 · 巡检行驶轨迹 V8.12</title>
+  <title>二维云台雷达 · 巡检行驶轨迹 V8.15</title>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
   <!-- V8.9 / 2026-09-15: automatic route driving removed; save/open routes and scans retained. MCU V8.9/base V4.9; handheld V1.5/camera V1.2 unchanged. -->
@@ -71,16 +71,16 @@
       <aside class="panel rightbar"><div class="section-label">障碍物列表</div><div id="detections" class="detections"></div><div class="rule"></div><div class="section-label">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="rule"></div><div class="section-label">最近数据帧 <button id="clearFeed" class="clear" type="button">清空</button></div><div class="data-format"><strong id="rawData">等待数据</strong><br><span id="formatHint">距离(cm), 水平角, 俯仰角, 报警</span></div></aside>
     </section>
     <section class="bottom"><section class="panel trend"><div class="trend-head"><div><div class="section-label">距离趋势</div><strong>最近 30 次测距</strong></div><span class="threshold">-- 20 cm 报警线</span></div><canvas id="trend" aria-label="最近三十次距离变化趋势"></canvas></section><aside class="panel feed"><div class="section-label">数据接收日志</div><ul id="feed" class="feed-list"></ul></aside></section>
-    <footer class="footer"><span>V8.12 · 页面只显示 150 cm 内目标 · 近距离放大 · 扫描点保留 5 秒 · 报警阈值 20 cm</span><span id="lastUpdate">更新于 --:--:--</span></footer>
+    <footer class="footer"><span>V8.15 · 页面只显示 150 cm 内目标 · 近距离放大 · 扫描点保留 5 秒 · 报警阈值 20 cm</span><span id="lastUpdate">更新于 --:--:--</span></footer>
   </main>
   <script src="three.min.js?v=8.12"></script>
   <script src="OrbitControls.umd.js?v=8.12"></script>
   <script src="gimbal-model.js?v=8.12"></script>
   <script src="scan-snapshot.js?v=8.14"></script>
   <script src="vehicle-route.js?v=8.14"></script>
-  <script src="route-log.js?v=8.14"></script>
+  <script src="route-log.js?v=8.15"></script>
   <script src="wheel-speed-panel.js?v=8.14"></script>
-  <script src="camera-panel.js?v=8.14"></script>
+  <script src="camera-panel.js?v=8.15"></script>
   <script>
     (() => {
       const $ = id => document.getElementById(id); const radar = $('radar'), elevation = $('elevation'), trend = $('trend'); const rctx = radar.getContext('2d'), ectx = elevation.getContext('2d'), tctx = trend.getContext('2d');
@@ -128,15 +128,15 @@ function updateGas(gases) {
     grid.append(card);
   });
 }
-      function updateUI(ageMs=0) { const {distance,heading,tilt,alarm,distanceValid,link} = data, inRange=distanceValid&&distance<=DISPLAY_RANGE_CM, danger=inRange&&alarm, caution=inRange&&distance>=20&&distance<40; $('distance').textContent=distanceValid?distance.toFixed(1):'--'; $('heading').textContent=link?fmtAngle(heading):'-- deg'; $('tilt').textContent=link?fmtAngle(tilt):'-- deg'; $('count').textContent=String(points.length).padStart(2,'0'); $('rawData').textContent=distanceValid?`${distance.toFixed(1)},${Math.round(heading)},${Math.round(tilt)},${danger?1:0}`:`--,${Math.round(heading)},${Math.round(tilt)},0`; $('lastUpdate').textContent=`更新于 ${now()} · 延迟 ${ageMs} ms`; $('statusDot').className=`state-dot ${!inRange?'':danger?'danger':caution?'':'safe'}`; $('statusText').textContent=!distanceValid?'无回波':!inRange?'范围外':danger?'报警':caution?'注意':'安全'; $('statusNote').textContent=!distanceValid?'HC-SR04 当前没有返回有效距离。':!inRange?'目标超过 150 cm，不进入雷达图和历史记录。':danger?'障碍物进入 20 cm 报警范围，请立即调整云台。':caution?'障碍物位于 20-40 cm 注意范围。':'障碍物位于 40-150 cm 安全范围。'; $('echoText').textContent=distanceValid?'HC-SR04 回波有效':'未收到有效超声波回波'; renderDetections(); renderRadar(); renderElevation(); renderTrend(); }
+      function updateUI(ageMs=null) { const {distance,heading,tilt,alarm,distanceValid,link} = data, inRange=distanceValid&&distance<=DISPLAY_RANGE_CM, danger=inRange&&alarm, caution=inRange&&distance>=20&&distance<40; $('distance').textContent=distanceValid?distance.toFixed(1):'--'; $('heading').textContent=link?fmtAngle(heading):'-- deg'; $('tilt').textContent=link?fmtAngle(tilt):'-- deg'; $('count').textContent=String(points.length).padStart(2,'0'); $('rawData').textContent=distanceValid?`${distance.toFixed(1)},${Math.round(heading)},${Math.round(tilt)},${danger?1:0}`:`--,${Math.round(heading)},${Math.round(tilt)},0`; $('lastUpdate').textContent=`更新于 ${now()} · 主控数据年龄 ${Number.isFinite(ageMs)?ageMs+" ms":"--"}`; $('statusDot').className=`state-dot ${!inRange?'':danger?'danger':caution?'':'safe'}`; $('statusText').textContent=!distanceValid?'无回波':!inRange?'范围外':danger?'报警':caution?'注意':'安全'; $('statusNote').textContent=!distanceValid?'HC-SR04 当前没有返回有效距离。':!inRange?'目标超过 150 cm，不进入雷达图和历史记录。':danger?'障碍物进入 20 cm 报警范围，请立即调整云台。':caution?'障碍物位于 20-40 cm 注意范围。':'障碍物位于 40-150 cm 安全范围。'; $('echoText').textContent=distanceValid?'HC-SR04 回波有效':'未收到有效超声波回波'; renderDetections(); renderRadar(); renderElevation(); renderTrend(); }
       function renderDetections() { const current=data.distanceValid&&data.link&&data.distance<=DISPLAY_RANGE_CM?[{...data}]:[]; const visible=[...points,...current].sort((a,b)=>a.distance-b.distance).slice(0,3); $('detections').innerHTML=visible.length?visible.map((p,i)=>`<div class="detection ${p.distance<20?'danger':p.distance>=40?'safe':''}"><div class="detection-top"><strong>目标 ${String(i+1).padStart(2,'0')}</strong><strong>${p.distance.toFixed(1)} cm</strong></div><small>方位 ${fmtAngle(p.heading)} · 俯仰 ${fmtAngle(p.tilt || 0)}</small></div>`).join(''):'<div class="section-label">150 cm 内暂无障碍物</div>'; }
       function renderRadar() { const {width:w,height:h}=fit(radar,rctx), cx=w/2, cy=h-36, max=Math.min(w*.43,h*.77); rctx.clearRect(0,0,w,h); rctx.fillStyle='#111a16'; rctx.fillRect(0,0,w,h); rctx.save(); rctx.strokeStyle='rgba(72,213,151,.18)'; rctx.lineWidth=1; [10,20,30,40,50,60,100,150].forEach(d=>{const radius=rangeRatio(d)*max;rctx.beginPath();rctx.arc(cx,cy,radius,Math.PI,0);rctx.stroke();rctx.fillStyle='#7d9689';rctx.font='11px Segoe UI';rctx.fillText(`${d} cm`,cx+5,cy-radius+13);}); [-90,-60,-30,0,30,60,90].forEach(a=>{let q=(a-90)*Math.PI/180;rctx.beginPath();rctx.moveTo(cx,cy);rctx.lineTo(cx+max*Math.cos(q),cy+max*Math.sin(q));rctx.stroke();if(a%30===0){rctx.fillStyle='#7d9689';rctx.fillText(`${a>0?'+':''}${a}°`,cx+(max+17)*Math.cos(q)-10,cy+(max+17)*Math.sin(q)+4);}}); if(data.link){const beam=(data.heading-90)*Math.PI/180; const gradient=rctx.createLinearGradient(cx,cy,cx+max*Math.cos(beam),cy+max*Math.sin(beam)); gradient.addColorStop(0,'rgba(72,213,151,.22)');gradient.addColorStop(1,'rgba(72,213,151,0)');rctx.strokeStyle='#48d597';rctx.lineWidth=2;rctx.beginPath();rctx.moveTo(cx,cy);rctx.lineTo(cx+max*Math.cos(beam),cy+max*Math.sin(beam));rctx.stroke(); rctx.fillStyle=gradient;rctx.beginPath();rctx.moveTo(cx,cy);rctx.arc(cx,cy,max,beam-.045,beam+.045);rctx.closePath();rctx.fill();} const all=data.distanceValid&&data.link&&data.distance<=DISPLAY_RANGE_CM?[...points,{...data,current:true}]:points;all.forEach(p=>{const a=(p.heading-90)*Math.PI/180,projection=pitchProjection(p.distance,p.tilt||0),d=rangeRatio(projection.forward)*max,x=cx+d*Math.cos(a),y=cy+d*Math.sin(a),pointColor=p.distance<20?'#ff6767':p.distance<40?'#f2bc5e':'#48d597';rctx.beginPath();rctx.arc(x,y,p.current?7:5,0,Math.PI*2);rctx.fillStyle=pointColor;rctx.shadowColor=pointColor;rctx.shadowBlur=p.current?16:7;rctx.fill();rctx.shadowBlur=0;});rctx.beginPath();rctx.arc(cx,cy,5,0,Math.PI*2);rctx.fillStyle='#edf5f0';rctx.fill();rctx.restore(); }
       function renderElevation() { const {width:w,height:h}=fit(elevation,ectx), left=38, right=18, top=20, bottom=30, originY=(top+h-bottom)/2, plotW=w-left-right, plotH=(h-top-bottom)/2; ectx.clearRect(0,0,w,h);ectx.fillStyle='#111a16';ectx.fillRect(0,0,w,h);ectx.save();ectx.strokeStyle='rgba(72,213,151,.18)';ectx.lineWidth=1;[0,20,40,60,100,150].forEach(d=>{const x=left+plotW*rangeRatio(d);ectx.beginPath();ectx.moveTo(x,top);ectx.lineTo(x,h-bottom);ectx.stroke();ectx.fillStyle='#7d9689';ectx.font='11px Segoe UI';ectx.fillText(`${d}`,x-5,h-10);});[-90,-60,-30,0,30,60,90].forEach(v=>{const y=originY-heightRatio(v)*plotH;ectx.beginPath();ectx.moveTo(left,y);ectx.lineTo(w-right,y);ectx.stroke();ectx.fillStyle='#7d9689';ectx.fillText(`${v>0?'+':''}${v}`,3,y+4);});ectx.strokeStyle='rgba(72,213,151,.7)';ectx.lineWidth=1.5;ectx.beginPath();ectx.moveTo(left,originY);ectx.lineTo(w-right,originY);ectx.stroke();ectx.fillStyle='#7d9689';ectx.fillText('相对高度 cm',left+3,top-5); const all=data.distanceValid&&data.link&&data.distance<=DISPLAY_RANGE_CM?[...points,{...data,current:true}]:points;all.forEach(p=>{const projection=pitchProjection(p.distance,p.tilt||0),forward=projection.forward,height=projection.height,x=left+rangeRatio(forward)*plotW,y=originY-heightRatio(height)*plotH,pointColor=p.distance<20?'#ff6767':p.distance<40?'#f2bc5e':'#48d597';ectx.beginPath();ectx.arc(x,y,p.current?7:5,0,Math.PI*2);ectx.fillStyle=pointColor;ectx.shadowColor=pointColor;ectx.shadowBlur=p.current?16:7;ectx.fill();ectx.shadowBlur=0;if(p.current){ectx.strokeStyle='rgba(72,213,151,.55)';ectx.setLineDash([3,4]);ectx.beginPath();ectx.moveTo(x,originY);ectx.lineTo(x,y);ectx.stroke();ectx.setLineDash([]);}});ectx.beginPath();ectx.arc(left,originY,5,0,Math.PI*2);ectx.fillStyle='#edf5f0';ectx.fill();ectx.fillStyle='#7d9689';ectx.fillText('云台',left+8,originY-8);ectx.restore(); }
       function renderTrend() { const {width:w,height:h}=fit(trend,tctx), pad={l:37,r:10,t:13,b:26}, x=i=>pad.l+i*(w-pad.l-pad.r)/Math.max(1,history.length-1), y=v=>pad.t+(1-rangeRatio(v))*(h-pad.t-pad.b); tctx.clearRect(0,0,w,h); [0,20,40,60,100,150].forEach(v=>{tctx.strokeStyle=v===20?'rgba(255,103,103,.75)':'#32433b';tctx.setLineDash(v===20?[5,5]:[]);tctx.beginPath();tctx.moveTo(pad.l,y(v));tctx.lineTo(w-pad.r,y(v));tctx.stroke();tctx.setLineDash([]);tctx.fillStyle='#93a69c';tctx.font='11px Segoe UI';tctx.fillText(`${v}`,4,y(v)+4);}); if(history.length){tctx.strokeStyle='#48d597';tctx.lineWidth=2;tctx.beginPath();history.forEach((v,i)=>i?tctx.lineTo(x(i),y(v)):tctx.moveTo(x(i),y(v)));tctx.stroke(); const last=history[history.length-1],lx=x(history.length-1),ly=y(last);tctx.beginPath();tctx.arc(lx,ly,4,0,Math.PI*2);tctx.fillStyle=last<20?'#ff6767':last<40?'#f2bc5e':'#48d597';tctx.fill();}tctx.fillStyle='#93a69c';tctx.fillText('30 次前',pad.l,h-6);tctx.fillText('现在',w-pad.r-22,h-6); }
       function addFeed(text) { feed.unshift(`<li><time>${now()}</time>${text}</li>`); if(feed.length>6)feed.pop(); $('feed').innerHTML=feed.join(''); }
       function pruneExpiredPoints() { const before=points.length,cutoff=Date.now()-POINT_TTL_MS;points=points.filter(point=>point.updatedAt>=cutoff);if(points.length!==before){$('count').textContent=String(points.length).padStart(2,'0');renderDetections();renderRadar();renderElevation();} }
-      function pushFrame(frame) { const h=-Number(frame.roll),t=-Number(frame.pitch),d=Number(frame.distance),receivedAt=Date.now(),distanceValid=frame.distanceValid===true&&Number.isFinite(d),link=frame.link===true,inRange=distanceValid&&d<=DISPLAY_RANGE_CM;if(!Number.isFinite(h)||!Number.isFinite(t))return;data={distance:distanceValid?d:0,heading:h,tilt:t,alarm:inRange&&d<20,distanceValid,link};if(inRange&&link&&frame.sequence!==lastSequence){const cellKey=`${Math.round(h/ANGLE_CELL_DEG)},${Math.round(t/ANGLE_CELL_DEG)}`,existing=points.find(point=>point.cellKey===cellKey);if(existing){existing.samples.push(d);if(existing.samples.length>5)existing.samples.shift();const distance=median(existing.samples);Object.assign(existing,data,{distance,cellKey,updatedAt:receivedAt});}else{points.push({...data,cellKey,updatedAt:receivedAt,samples:[d]});if(points.length>MAX_POINTS)points.shift();}history.push(d);if(history.length>30)history.shift();}if(frame.sequence!==lastSequence&&receivedAt-lastFeedAt>=900){lastFeedAt=receivedAt;addFeed(distanceValid?`Wi-Fi: ${d.toFixed(1)} cm / ${Math.round(h)}° / ${Math.round(t)}°`:'Wi-Fi: 超声波无有效回波');}lastSequence=frame.sequence;pruneExpiredPoints();updateUI(Number(frame.ageMs)||0); }
-      function setConnectionState(mode) { const connected=mode==='online',handheldLost=mode==='handheld';$('connectionDot').className=`indicator${connected?' online':''}`;$('connectionDot').style.background=handheldLost?'var(--red)':'';$('connectionText').textContent=connected?'基座数据在线':handheldLost?'基座在线，手持端失联':'未连接基座 ESP';if(mode==='offline'){$('lastUpdate').textContent='基座数据已中断';$('echoText').textContent='等待基座 ESP 数据';} }
+      function pushFrame(frame) { const h=-Number(frame.roll),t=-Number(frame.pitch),d=Number(frame.distance),receivedAt=Date.now(),distanceValid=frame.distanceValid===true&&Number.isFinite(d),link=frame.link===true,inRange=distanceValid&&d<=DISPLAY_RANGE_CM;if(!Number.isFinite(h)||!Number.isFinite(t))return;data={distance:distanceValid?d:0,heading:h,tilt:t,alarm:inRange&&d<20,distanceValid,link};if(inRange&&link&&frame.sequence!==lastSequence){const cellKey=`${Math.round(h/ANGLE_CELL_DEG)},${Math.round(t/ANGLE_CELL_DEG)}`,existing=points.find(point=>point.cellKey===cellKey);if(existing){existing.samples.push(d);if(existing.samples.length>5)existing.samples.shift();const distance=median(existing.samples);Object.assign(existing,data,{distance,cellKey,updatedAt:receivedAt});}else{points.push({...data,cellKey,updatedAt:receivedAt,samples:[d]});if(points.length>MAX_POINTS)points.shift();}history.push(d);if(history.length>30)history.shift();}if(frame.sequence!==lastSequence&&receivedAt-lastFeedAt>=900){lastFeedAt=receivedAt;addFeed(distanceValid?`Wi-Fi: ${d.toFixed(1)} cm / ${Math.round(h)}° / ${Math.round(t)}°`:'Wi-Fi: 超声波无有效回波');}lastSequence=frame.sequence;pruneExpiredPoints();updateUI(frame.ageMs); }
+      function setConnectionState(mode) { const connected=mode==='online',handheldLost=mode==='handheld';$('connectionDot').className=`indicator${connected?' online':''}`;$('connectionDot').style.background=handheldLost?'var(--red)':'';$('connectionText').textContent=connected?'基座数据在线':handheldLost?'基座在线，手持端失联':mode==='stm32'?'基座在线，主控数据中断':'未连接基座 ESP';if(mode==='offline'||mode==='stm32'){$('lastUpdate').textContent=mode==='stm32'?'等待 STM32 新数据':'基座数据已中断';$('echoText').textContent='等待基座 ESP 数据';} }
       let telemetryPollAt=0,scanTelemetryAt=0,scanTelemetryOnline=false;
     // Save the filtered visible cloud, without references to live mesh/state objects.
     function captureScan(){
@@ -147,8 +147,56 @@ function updateGas(gases) {
       return {kind:'2d',points:savedPoints};
     }
     window.VehicleRoute.setScanCapture(captureScan);
-      async function pollTelemetry() { if(polling||document.hidden)return;telemetryPollAt=Date.now();polling=true;const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),800);try{const response=await fetch(`${API_URL}?t=${Date.now()}`,{cache:'no-store',signal:controller.signal});if(!response.ok)throw new Error('HTTP');const frame=await response.json();scanTelemetryOnline=frame.online===true&&frame.link===true&&Number.isFinite(Number(frame.roll))&&Number.isFinite(Number(frame.pitch));if(scanTelemetryOnline&&frame.sequence!==lastSequence)scanTelemetryAt=Date.now();if(window.VehicleRoute)window.VehicleRoute.feed(frame.odometry);if(window.WheelSpeedPanel)window.WheelSpeedPanel.feed(frame.wheelSpeed);updateGas(frame.gases);if(frame.online!==true){setConnectionState('offline');return;}setConnectionState(frame.link===true?'online':'handheld');pushFrame(frame);}catch(error){scanTelemetryOnline=false;if(window.VehicleRoute)window.VehicleRoute.disconnect();updateGas([]);setConnectionState('offline');}finally{clearTimeout(timeout);polling=false;} }
-      $('connectBtn').addEventListener('click',pollTelemetry); $('clearFeed').addEventListener('click',()=>{$('feed').innerHTML='';feed=[];}); window.addEventListener('resize',()=>{renderRadar();renderElevation();renderTrend();}); setConnectionState('offline'); updateUI(); pollTelemetry(); setInterval(pollTelemetry,100); setInterval(pruneExpiredPoints,500);
+      let telemetryTimer=0, telemetryFailures=0;
+    function clearLiveTelemetry(mode){
+        scanTelemetryOnline=false;
+        data={...data,distanceValid:false,link:false,alarm:false};
+        updateUI();
+        setConnectionState(mode);
+    }
+    async function pollTelemetry(){
+      if(polling||document.hidden)return;
+      clearTimeout(telemetryTimer);
+      telemetryPollAt=Date.now();
+      polling=true;
+      let nextDelay=100;
+      const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),800);
+      try{
+        const response=await fetch(API_URL+'?t='+Date.now(),{cache:'no-store',signal:controller.signal});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        const frame=await response.json();
+        telemetryFailures=0;
+        scanTelemetryOnline=frame.online===true&&frame.link===true&&Number.isFinite(Number(frame.roll))&&Number.isFinite(Number(frame.pitch));
+        if(scanTelemetryOnline&&frame.sequence!==lastSequence)scanTelemetryAt=Date.now();
+        if(window.VehicleRoute)window.VehicleRoute.feed(frame.odometry);
+        if(window.WheelSpeedPanel)window.WheelSpeedPanel.feed(frame.wheelSpeed);
+        updateGas(frame.gases);
+        if(frame.online!==true){nextDelay=400;clearLiveTelemetry('stm32');return;}
+        if(frame.vehicle&&frame.vehicle.online===true&&frame.vehicle.mode===5)nextDelay=160;
+        const handheldLost=frame.link!==true ||
+          (frame.handheldUdpOnline===false&&frame.vehicle&&[0,5].includes(frame.vehicle.mode));
+        setConnectionState(handheldLost?'handheld':'online');
+        if(Number.isFinite(frame.maxForwardGapMs)){
+          $('connectionText').title='基座转发最长间隔 '+frame.maxForwardGapMs+' ms · 收到的遥控包序号缺口 '+frame.skippedUdp;
+        }
+        pushFrame(frame);
+      }catch(error){
+        telemetryFailures++;
+        nextDelay=Math.min(2500,250 * (2 ** Math.min(telemetryFailures-1,4)));
+        if(window.VehicleRoute)window.VehicleRoute.disconnect();
+        updateGas([]);
+        clearLiveTelemetry('offline');
+      }finally{
+        clearTimeout(timeout);
+        polling=false;
+        if(!document.hidden)telemetryTimer=setTimeout(pollTelemetry,Math.max(0,nextDelay-(telemetryFailures ? 0 : Date.now()-telemetryPollAt)));
+      }
+    }
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden)clearTimeout(telemetryTimer);
+      else pollTelemetry();
+    });
+      $('connectBtn').addEventListener('click',pollTelemetry); $('clearFeed').addEventListener('click',()=>{$('feed').innerHTML='';feed=[];}); window.addEventListener('resize',()=>{renderRadar();renderElevation();renderTrend();}); setConnectionState('offline'); updateUI(); pollTelemetry(); setInterval(pruneExpiredPoints,500);
     })();
   </script>
 </body>

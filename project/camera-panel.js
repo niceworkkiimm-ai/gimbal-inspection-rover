@@ -1,7 +1,5 @@
-/* 项目 V8.5 / 摄像头 V1.2 / 网页协议1.0 / 2026-09-13
- * V8.5新增10帧选项，摄像头负责上下翻转，网页不重复翻转；遥测/控制不变。
- * 两页共用的独立图传窗口。只向摄像头请求JPEG，不发车辆/云台指令。
- * 默认关闭、单请求、1.2秒超时、旧帧清空、后台自动关闭；不改遥测轮询。
+/* V8.15：两页共用的车载图传。断流清空旧帧并限速重试。
+ * 省带宽由慢收图触发，也可由摄像头根据 RSSI 启用。
  */
 (() => {
   'use strict';
@@ -64,8 +62,8 @@
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE) || '{}');
     $('address').value = typeof saved.address === 'string' ? saved.address : 'http://rover-camera.local';
-    $('rate').value = ['3', '5', '10'].includes(saved.rate) ? saved.rate : '10';
-  } catch (_) { $('address').value = 'http://rover-camera.local'; }
+    $('rate').value = ['3', '5', '10'].includes(saved.rate) ? saved.rate : '5';
+  } catch (_) { $('address').value = 'http://rover-camera.local'; $('rate').value = '5'; }
 
   let active = false, generation = 0, controller = null, timer = 0;
   let currentUrl = '', lastFrameId = '', lastFrameAt = 0, previousFrameAt = 0, failures = 0;
@@ -112,6 +110,8 @@
     $('metrics').textContent = '320 × 240 · 图传接口 1.0';
     message(text, error ? 'error' : '');
   }
+  let liteUntil = 0;
+
   async function poll(g, origin, viewer) {
     if (!active || generation !== g) return;
     const began = performance.now(), abort = new AbortController();
@@ -119,16 +119,16 @@
     const deadline = setTimeout(() => abort.abort(), 1200);
     let pendingUrl = '', nextDelay = 1000;
     try {
-      const response = await fetch(origin + '/capture?viewer=' + viewer + '&t=' + Date.now(),
+      const response = await fetch(origin + '/capture?viewer=' + viewer + '&lite=' + (began < liteUntil ? '1' : '0') + '&t=' + Date.now(),
         {mode:'cors', cache:'no-store', credentials:'omit', signal:abort.signal});
       if (response.status === 409) {
         stop('已有其他窗口收图。先关闭另一页的视频，等 3 秒再开启。', true);
         return;
       }
-      if (response.status === 429) { nextDelay = 250; return; }
+      if (response.status === 429) { nextDelay = 350; return; }
       if (!response.ok) throw new Error('摄像头响应 ' + response.status + '；可打开摄像头 /status 检查');
       if (response.headers.get('X-Camera-Version') !== '1.0')
-        throw new Error('摄像头接口不匹配，请烧录 ESP32CAM_Camera V1.2 固件');
+        throw new Error('摄像头接口不匹配，请烧录 ESP32CAM_Camera 兼容固件');
       const frameId = response.headers.get('X-Frame-Id'), ageText = response.headers.get('X-Frame-Age-Ms');
       const age = ageText === null ? NaN : Number(ageText);
       if (!frameId || frameId === lastFrameId || !Number.isFinite(age) || age < 0 || age > 500)
@@ -142,7 +142,7 @@
       decoded.src = pendingUrl;
       await decoded.decode();
       if (generation !== g) return;
-      if (abort.signal.aborted || performance.now() - began > 1000) throw new Error('收图耗时超过 1 秒');
+      if (abort.signal.aborted || age + performance.now() - began > 1000) throw new Error('收到的画面已超过 1 秒');
       if (currentUrl) URL.revokeObjectURL(currentUrl);
       currentUrl = pendingUrl;
       pendingUrl = '';
@@ -155,19 +155,22 @@
       previousFrameAt = lastFrameAt;
       failures = 0;
       $('tag').textContent = '最新画面';
-      $('metrics').textContent = fps + ' 帧/秒 · 收图 ' + Math.round(lastFrameAt - began) + ' ms';
+      const elapsed = lastFrameAt - began;
+      if (elapsed > 350) liteUntil = lastFrameAt + 12000;
+      const lite = response.headers.get('X-Camera-Profile') === 'lite' || lastFrameAt < liteUntil;
+      $('metrics').textContent = fps + ' 帧/秒 · 收图 ' + Math.round(elapsed) + ' ms' + (lite ? ' · 省带宽' : '');
       message('持续收图 · 此耗时不是端到端延迟', 'live');
       // 10帧档至少105ms，留5ms调度余量；等待本次完成，不并发、不补发积压帧。
-      nextDelay = Math.max(105, 1000 / Number($('rate').value)) - (performance.now() - began);
+      nextDelay = Math.max(lite ? 350 : 105, 1000 / Number($('rate').value)) - elapsed;
     } catch (error) {
       if (generation !== g) return;
       failures++;
       clearFrame('画面中断，请停止驾驶');
       $('metrics').textContent = '无可用实时画面';
-      if (failures >= 3) {
-        stop('连接失败：' + (error.name === 'AbortError' ? '收图超时' : error.message) +
-          '。核对 IP、同一热点和浏览器的局域网访问权限；也可先单独打开摄像头。', true);
-      } else message('画面中断，请停止驾驶 · 正在重试 ' + failures + '/3', 'error');
+      liteUntil = performance.now() + 12000;
+      nextDelay = Math.min(3000, 350 * (2 ** Math.min(failures - 1, 4)));
+      const reason = error.name === 'AbortError' ? '收图超时' : error.message;
+      message('画面中断，请停止驾驶 · ' + reason + ' · 正在自动重连', 'error');
     } finally {
       clearTimeout(deadline);
       if (pendingUrl) URL.revokeObjectURL(pendingUrl);
@@ -182,6 +185,7 @@
     stop();
     active = true;
     lastFrameId = '';
+    liteUntil = 0;
     previousFrameAt = 0;
     failures = 0;
     $('address').value = origin;

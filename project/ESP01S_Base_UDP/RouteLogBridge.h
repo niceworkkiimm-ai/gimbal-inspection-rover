@@ -33,7 +33,6 @@ void parseJournalLine(const char *line){
   journalReady=journalMask==(1U<<journalCount)-1U;
 }
 void sendJournal(){
-  addCorsHeaders();
   String arg=server.arg("after");const char *p=arg.c_str(),*end=p+arg.length();uint32_t after;
   if(!arg.length()||arg.length()>10||!HH_Number(&p,end,&after)||p!=end){
     server.send(400,"application/json","{\"error\":\"cursor\"}");return;

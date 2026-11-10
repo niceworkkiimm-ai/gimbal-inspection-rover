@@ -1,7 +1,7 @@
 #include "secrets.h"
 #pragma once
 /*
- * 摄像头固件 V1.3 / 2026-10-25
+ * 摄像头固件 V1.4 / 2026-11-10
  * 本次：相对V1.2画面旋转180度（同时切换上下翻转与左右镜像）。
  * 上限10帧/秒、分辨率、完整接线及控制链路不变。
  * 实物：ESP-32S / ESP32-CAM + ESP32-CAM-MB(CH340C)，不是 ESP32-S3。
@@ -39,7 +39,7 @@
 #error "This firmware requires PSRAM. Select AI Thinker ESP32-CAM."
 #endif
 
-static const char CAMERA_VERSION[] = "1.3";
+static const char CAMERA_VERSION[] = "1.4";
 // 网页协议保持1.0，兼容原查看器；V8.5两页支持10帧。此处不是固件版本。
 static const char CAMERA_API_VERSION[] = "1.0";
 static const char CAMERA_WIFI_SSID[] = "GimbalCtrl";
@@ -57,7 +57,9 @@ static const int CAM_FLASH_LED = 4;
 // V1.2为VFLIP=1、HMIRROR=0；两项同时取反，使当前画面整体旋转180度。
 static const int CAMERA_VFLIP = 0;
 static const int CAMERA_HMIRROR = 1;
-static const int CAMERA_JPEG_QUALITY = 18;
+static const int CAMERA_JPEG_QUALITY = 22;
+static const int CAMERA_LITE_JPEG_QUALITY = 34; // Larger value gives a smaller JPEG.
+static const unsigned CAMERA_LITE_INTERVAL_MS = 330;
 static const unsigned CAMERA_MIN_INTERVAL_MS = 100; // 全局最多10帧/秒，实际帧率受WiFi限制。
 static const unsigned CAMERA_MAX_FPS = 1000 / CAMERA_MIN_INTERVAL_MS;
 static const unsigned CAMERA_VIEWER_LEASE_MS = 2500; // 单查看者。

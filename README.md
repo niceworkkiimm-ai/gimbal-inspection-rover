@@ -11,21 +11,21 @@
 | 部分 | 版本 | 正确入口 |
 |---|---|---|
 | STM32 主控 | V8.13 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
-| 基座 ESP-01S | V4.9 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
+| 基座 ESP-01S | V4.10 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
-| AI Thinker ESP32-CAM | V1.3 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
-| 二维网页 | V8.12 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.14 | `project/gimbal-3d-scan.html` |
+| AI Thinker ESP32-CAM | V1.4 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
+| 二维网页 | V8.15 | `project/gimbal-radar-standalone.html` |
+| 三维网页 | V8.15 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部 V8.13 完整接线表为准。
 
-摄像头 V1.3（2026-10-25）相对 V1.2 将画面旋转 180°：`CAMERA_VFLIP=0`、`CAMERA_HMIRROR=1`。方向调整在摄像头传感器端完成，各查看页面共用调整后的画面；只需重新烧录摄像头，帧率、分辨率和接线不变。编译检查不代表已经完成实物方向验证。
+V8.15 更新基座 HTTP 分段收发、网页链路状态和摄像头自适应省带宽。更新时重烧基座 V4.10 和摄像头 V1.4，并刷新本仓库的网页。图传默认 5 帧/秒，链路较弱时降低 JPEG 体积并限至约 3 帧/秒。V1.3 的画面方向设置继续沿用，详见 [网络与图传复测](docs/network-and-video.md)。
 
 ## 离线模拟演示与录屏
 
 打开 `project/巡检模拟演示.html`，或者在三维页点击“模拟演示”，再按“开始演示”。约 2 分 13 秒、13.15 米的模拟路线依次经过双侧通道、转角墙面、台阶、碎石和柱体五个停车扫描点，自动绘制轨迹、生成点云并保存可回看的扫描快照。支持暂停、重播、拖动进度、0.5×/1×/2×/4×及录屏布局。
 
-演示全程使用本地模拟数据，不请求基座或摄像头、不发送控制指令。网页、JSON、CSV和点图窗口均标明模拟来源。`project/模拟数据_完整巡检路线_五个扫描点.json` 可用原有“打开路线”重新查看。详细操作见 [模拟演示与录屏](project/V8.14_模拟演示与录屏.md)。本次只更新网页，固件和接线不变。
+演示全程使用本地模拟数据，不请求基座或摄像头、不发送控制指令。网页、JSON、CSV和点图窗口均标明模拟来源。`project/模拟数据_完整巡检路线_五个扫描点.json` 可用原有“打开路线”重新查看。详细操作见 [模拟演示与录屏](project/V8.14_模拟演示与录屏.md)。
 
 ## 已实现功能
 

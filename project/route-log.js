@@ -102,7 +102,7 @@
         if(!r.ok)throw Error('路线补传暂未完成，正在重试');
         const p=await r.json();if(generation!==this.generation)return 0;
         this.reader.ingest(p);
-        return this.engine.logPending?80:200;
+        return this.engine.logPending?80:320;
       }catch(error){
         if(generation===this.generation){
           this.engine.online=false;this.engine.logPending=true;
