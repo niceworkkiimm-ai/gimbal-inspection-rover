@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address, ip_network
 import json
 from pathlib import Path
+import socket
 from threading import Lock, Thread
 from time import monotonic, sleep
 from urllib.parse import urlsplit
@@ -55,9 +56,22 @@ def fields(value, keys):
             if key in value and isinstance(value[key], (bool, int, str))}
 
 
+class RoverConnection(HTTPConnection):
+    def connect(self):
+        try:
+            address = ip_address(self.host)
+        except ValueError:
+            return super().connect()
+        # Windows name resolution for rover-camera.local can delay getaddrinfo
+        # in the other thread too. Connect to numeric rover addresses directly.
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect((str(address), self.port))
+
+
 def sample(host, path):
     started = monotonic()
-    conn = HTTPConnection(host, timeout=0.9)
+    conn = RoverConnection(host, timeout=0.9)
     try:
         conn.request('GET', path, headers={'Connection': 'close', 'Accept': 'application/json'})
         with conn.getresponse() as response:
