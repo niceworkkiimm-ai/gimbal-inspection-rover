@@ -22,6 +22,6 @@ void CarLogic_Init(CarLogic *s, uint32_t now);
 void CarLogic_Stop(CarLogic *s, uint32_t now, uint8_t state);
 void CarLogic_Mix(int16_t forward, int16_t left, int16_t out[4]);
 void CarLogic_Step(CarLogic *s, uint32_t now, uint8_t active, uint8_t enabled,
-                   uint8_t safe, uint8_t fresh, uint8_t ready, uint32_t packet,
+                   uint8_t safe, uint8_t rx_fault, uint8_t fresh, uint8_t ready, uint32_t packet,
                    int16_t roll, int16_t pitch);
 #endif

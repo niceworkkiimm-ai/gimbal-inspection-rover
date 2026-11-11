@@ -1,10 +1,11 @@
 #include "secrets.h"
 /*
- * 固件版本: V4.10
- * 当前接线（STM32 V8.13）：ESP TX->PA3(USART2_RX)，RX->PA2(USART2_TX)。
+ * 固件版本: V4.11
+ * 当前接线（STM32 V8.16）：ESP TX->PA3(USART2_RX)，RX->PA2(USART2_TX)。
  * 原PA9/PA10信号线撤掉；VCC/EN稳定3.3V、GND共地不变；115200/8N1不变。
  * 本次需重烧基座 ESP；下方旧串口条目为历史。
- * 更新日期: 2026-11-10
+ * 更新日期: 2026-11-11
+ * V4.11：释放 HTTP 连接时不等待对端 ACK，分别统计 UDP 接收、串口转发和主控接收故障。
  * V4.10：HTTP 分段处理，让手持 UDP 和串口持续得到服务，并提供链路诊断。
  * V4.9：删除自动按路线行驶R1/R2接口，旧/api/route返回410；路线记录/保存补传与手持转发保留，接线不变。
  * V4.8：配套STM32 V8.0；串口忙时保留最新手持帧、扩充接收缓存、减少跨域预检，路线接口返回具体反馈故障。接线不变。
@@ -68,6 +69,13 @@ struct VehicleTelemetry {
   bool received=false;
 };
 VehicleTelemetry vehicle;
+
+struct ControlDiagnostics {
+  uint32_t receivedAtMs=0, uartRxFaults=0, maxMotorServiceGapMs=0;
+  uint8_t hold=0;
+  bool received=false;
+};
+ControlDiagnostics control;
 
 WheelSpeedFrame wheelSpeed = {};
 bool wheelSpeedReceived=false;
@@ -197,7 +205,7 @@ footer{min-height:48px;padding:0 20px;display:flex;align-items:center;justify-co
 <body>
 <div class="shell">
 <header class="topbar">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.10</span></p></div></div>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.11</span></p></div></div>
   <div id="state" class="state" data-online="false"><i aria-hidden="true"></i><span>等待基座数据</span></div>
 </header>
 <main>
@@ -226,12 +234,14 @@ footer{min-height:48px;padding:0 20px;display:flex;align-items:center;justify-co
 var modeNames={horizontal:'左右扫描',vertical:'上下扫描',all:'全方位扫描',stop:'已停车并回中',handheld:'体感控制'};
 function setActive(button,mode){document.querySelectorAll('[data-mode]').forEach(function(item){item.classList.remove('is-active')});if(mode!=='stop')button.classList.add('is-active');document.getElementById('modeText').textContent='当前：'+modeNames[mode]}
 async function sendMode(button,mode){var notice=document.getElementById('notice');notice.className='notice';notice.textContent='正在发送指令...';try{var response=await fetch('/api/scan?mode='+mode);var data=await response.json();if(!response.ok)throw new Error(data.message||'指令发送失败');setActive(button,mode);notice.textContent=data.message||'指令已发送'}catch(error){notice.className='notice error';notice.textContent=error.message||'指令发送失败'}}
-function updateVehicle(v) {
+function updateVehicle(v, control) {
   const label=document.getElementById('vehicleStatus'), wheels=document.getElementById('wheelOutput');
   const states=['未解锁：等待硬件确认','小车已停用','请放平手持端，等待确认','已就绪，倾斜可行驶','正在输出驱动指令','手持失联，已撤销驱动','保护停车：排查后切换模式重试'];
   const modes=['云台体感','左右扫描','上下扫描','全方位扫描','已停止','小车体感'];
   if(!v||v.online!==true){label.textContent='车辆状态离线';label.className='notice error';wheels.textContent='PWM：--';return;}
-  label.textContent=(modes[v.mode]||'未知模式')+' · '+(states[v.state]||'未知状态');
+  const hold=['','请放平手持端，等待确认','手持输入暂不可用','倾角超限，请减小倾斜','等待连续有效输入'];
+  const detail=v.state===2 && control && hold[control.hold];
+  label.textContent=(modes[v.mode]||'未知模式')+' · '+(detail||states[v.state]||'未知状态');
   label.className='notice'+(v.state>=5?' error':'');
   wheels.textContent='PWM '+v.pwm.map((p,i)=>(i+1)+'号 '+(p/10).toFixed(0)+'%').join(' / ')+'（非实测车速）';
   document.getElementById('modeText').textContent='当前：'+(modes[v.mode]||'未知');
@@ -281,7 +291,7 @@ async function update() {
     document.getElementById('pitch').textContent = data.online ? data.pitch : '--';
     updateDistance(data.online ? data.distance : null);
     updateGas(data.gases);
-    updateVehicle(data.vehicle);
+    updateVehicle(data.vehicle,data.controlDiagnostics);
     state.dataset.online = String(data.online === true);
     state.querySelector('span').textContent = data.online ? '主控在线' : '等待主控';
   } catch (error) {
@@ -415,8 +425,9 @@ bool parseGasLine(const char *line) {
   return true;
 }
 
-// Gap measured at UART enqueue, not at the motor.
-uint32_t lastUdpAt=0, lastForwardAt=0, maxForwardGapMs=0, skippedUdp=0;
+// UDP acceptance and UART enqueue are measured separately.
+uint32_t lastUdpAt=0, lastForwardAt=0, maxUdpGapMs=0, maxForwardGapMs=0, skippedUdp=0;
+uint32_t maxHttpPollUs=0;
 bool haveUdp=false, haveForwarded=false;
 
 void sendTelemetryJson() {
@@ -426,6 +437,12 @@ void sendTelemetryJson() {
   char *json=server.responseBuffer();
   constexpr size_t capacity=CooperativeHttp::responseCapacity;
   char roll[16], pitch[16], distance[16], concentration[24], carJson[200];
+  char controlJson[128]="null";
+  if(control.received && now-control.receivedAtMs<=kTelemetryTimeoutMs) {
+    snprintf(controlJson,sizeof(controlJson),
+      "{\"hold\":%u,\"uartRxFaults\":%lu,\"maxMotorServiceGapMs\":%lu}",
+      static_cast<unsigned>(control.hold),(unsigned long)control.uartRxFaults,(unsigned long)control.maxMotorServiceGapMs);
+  }
   bool carOnline=vehicle.received&&now-vehicle.receivedAtMs<=kTelemetryTimeoutMs;
   snprintf(carJson,sizeof(carJson),"{\"online\":%s,\"mode\":%u,\"state\":%u,\"pwm\":[%d,%d,%d,%d]}",
            carOnline?"true":"false",vehicle.mode,vehicle.state,
@@ -436,13 +453,14 @@ void sendTelemetryJson() {
   if (online && telemetry.distanceValid) formatTenths(distance, sizeof(distance), telemetry.distanceTenths);
   else strcpy(distance, "null");
   int count = snprintf(json, capacity,
-    "{\"gasProtocol\":2,\"sequence\":%lu,\"roll\":%s,\"pitch\":%s,\"distance\":%s,\"distanceValid\":%s,\"link\":%s,\"online\":%s,\"ageMs\":%lu,\"handheldUdpOnline\":%s,\"maxForwardGapMs\":%lu,\"skippedUdp\":%lu,\"vehicle\":%s,\"gases\":[",
+    "{\"gasProtocol\":2,\"sequence\":%lu,\"roll\":%s,\"pitch\":%s,\"distance\":%s,\"distanceValid\":%s,\"link\":%s,\"online\":%s,\"ageMs\":%lu,\"handheldUdpOnline\":%s,\"maxForwardGapMs\":%lu,\"skippedUdp\":%lu,\"uptimeMs\":%lu,\"maxUdpGapMs\":%lu,\"maxHttpPollUs\":%lu,\"controlDiagnostics\":%s,\"vehicle\":%s,\"gases\":[",
     (unsigned long)telemetry.sequence, roll, pitch, distance,
     online && telemetry.distanceValid ? "true" : "false",
     online && telemetry.link ? "true" : "false", online ? "true" : "false",
     (unsigned long)(online ? now-telemetry.receivedAtMs : 0),
     haveUdp && now-lastUdpAt<=250U ? "true" : "false",
-    (unsigned long)maxForwardGapMs,(unsigned long)skippedUdp,carJson);
+    (unsigned long)maxForwardGapMs,(unsigned long)skippedUdp,(unsigned long)now,
+    (unsigned long)maxUdpGapMs,(unsigned long)maxHttpPollUs,controlJson,carJson);
   size_t used = count > 0 ? (size_t)count : capacity;
   for (unsigned i = 0; i < 4 && used < capacity; ++i) {
     const GasReading &gas = gasReadings[i];
@@ -505,6 +523,18 @@ bool parseVehicleLine(const char *line) {
   vehicle.received=true;vehicle.receivedAtMs=millis();return true;
 }
 
+void parseControlDiagnosticsLine(const char *line) {
+  unsigned hold;
+  unsigned long uartFaults, serviceGap;
+  char trailing;
+  if(sscanf(line,"D,%u,%lu,%lu%c",&hold,&uartFaults,&serviceGap,&trailing)!=3 || hold>4) return;
+  control.hold=static_cast<uint8_t>(hold);
+  control.uartRxFaults=uartFaults;
+  control.maxMotorServiceGapMs=serviceGap;
+  control.receivedAtMs=millis();
+  control.received=true;
+}
+
 void readStm32Telemetry() {
   unsigned budget=1024;
   while (budget-- && Serial.available()) {
@@ -516,6 +546,7 @@ void readStm32Telemetry() {
         if (telemetryLine[0] == 'T') parseTelemetryLine(telemetryLine);
         else if (telemetryLine[0] == 'G') parseGasLine(telemetryLine);
         else if (telemetryLine[0] == 'V') parseVehicleLine(telemetryLine);
+        else if (telemetryLine[0] == 'D') parseControlDiagnosticsLine(telemetryLine);
         else if (telemetryLine[0] == 'E') parseEncoderLine(telemetryLine);
         else if (telemetryLine[0] == 'S') parseWheelSpeedLine(telemetryLine);
         else if (telemetryLine[0] == 'J') parseJournalLine(telemetryLine);
@@ -563,8 +594,10 @@ void forwardHandheldUdp() {
       if(!delta||delta>=0x80000000U)continue;
       skippedUdp+=delta-1U;
     }
-    lastUdpAt=millis();haveUdp=true;
-    sourceKnown=true;sourceIp=ip;lastSequence=candidate.sequence;lastAt=millis();
+    const uint32_t receivedAt=millis();
+    if(haveUdp && receivedAt-lastUdpAt>maxUdpGapMs)maxUdpGapMs=receivedAt-lastUdpAt;
+    lastUdpAt=receivedAt;haveUdp=true;
+    sourceKnown=true;sourceIp=ip;lastSequence=candidate.sequence;lastAt=receivedAt;
     newest=candidate;queued=true;
   }
   // If more remain, defer transmission until the next drained batch.
@@ -626,10 +659,14 @@ void loop() {
   for (unsigned i = 0; i < 4; ++i)
     if (gasReadings[i].received && now - gasReadings[i].receivedAtMs > kGasTimeoutMs) gasReadings[i].received = false;
   if(vehicle.received&&now-vehicle.receivedAtMs>kTelemetryTimeoutMs)vehicle.received=false;
+  if(control.received&&now-control.receivedAtMs>kTelemetryTimeoutMs)control.received=false;
   if(encoderFresh&&now-encoderAt>kTelemetryTimeoutMs)encoderFresh=false;
   forwardHandheldUdp();
   readStm32Telemetry();
+  const uint32_t httpStarted=micros();
   server.poll(handleHttp);
+  const uint32_t httpElapsed=micros()-httpStarted;
+  if(httpElapsed>maxHttpPollUs)maxHttpPollUs=httpElapsed;
   forwardHandheldUdp();
   readStm32Telemetry();
   yield();

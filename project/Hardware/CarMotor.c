@@ -10,6 +10,7 @@ static WheelSpeed wheel_speed;
 static volatile int16_t applied_pwm[4];
 static const int8_t feedback_sign[4]=WHEEL_ENCODER_SIGNS;
 static volatile uint32_t motor_ms, main_seen_ms, sample_cycles;
+static uint32_t uart_rx_faults, max_service_gap_ms;
 static volatile uint8_t initialized, active, sample_live, latched_fault, lease_lost;
 static uint16_t pwm_period;
 static uint8_t mode_epoch, have_epoch;
@@ -123,10 +124,15 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
     EncoderFrame encoder;
     if(!initialized)return;
     __disable_irq();
-    now=motor_ms;main_seen_ms=now;
+    now=motor_ms;
+    if(active&&mode==WIRELESS_MODE_CAR) {
+        uint32_t gap=now-main_seen_ms;
+        if(gap>max_service_gap_ms)max_service_gap_ms=gap;
+    }
+    main_seen_ms=now;
     active=(uint8_t)(mode==WIRELESS_MODE_CAR && CAR_RUNTIME_ENABLE);
     if(mode!=WIRELESS_MODE_CAR){latched_fault=0U;lease_lost=0U;}
-    if(active&&rx_fault)latched_fault=1U;
+    if(active&&rx_fault)uart_rx_faults++;
     if(data&&data->protocol==1U&&data->requested_mode==1U&&
        (uint32_t)(DWT->CYCCNT-data->arrival_cycles)<=
        (SystemCoreClock/1000U)*CAR_LINK_TIMEOUT_MS)
@@ -143,7 +149,7 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
     if(lease_lost){CarLogic_Stop(&car,now,CAR_LINK_LOST);lease_lost=0U;}
     CarLogic_Step(&car,now,(uint8_t)(mode==WIRELESS_MODE_CAR),
                    (uint8_t)CAR_RUNTIME_ENABLE,(uint8_t)!latched_fault,
-                   fresh,ready,packet,roll,pitch);
+                   rx_fault,fresh,ready,packet,roll,pitch);
     allowed=(uint8_t)(active&&!latched_fault&&!lease_lost&&fresh&&ready&&
                       car.state!=CAR_FAULT&&car.armed&&!car.paused);
     for(i=0;i<4;i++)demand[i]=car.pwm[i];
@@ -184,6 +190,12 @@ void CarMotor_GetStatus(uint8_t *state,int16_t pwm[4])
 uint8_t CarMotor_GetHoldReason(void)
 {
     return car.hold_reason;
+}
+
+void CarMotor_GetDiagnostics(uint32_t *uart_faults,uint32_t *service_gap_ms)
+{
+    *uart_faults=uart_rx_faults;
+    *service_gap_ms=max_service_gap_ms;
 }
 
 void CarMotor_GetWheelSpeed(WheelSpeedFrame *frame,uint32_t sequence)

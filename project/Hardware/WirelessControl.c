@@ -362,6 +362,15 @@ void WirelessControl_SendVehicle(uint32_t sequence,uint8_t mode,uint8_t state,
     if(n>0&&n<(int)sizeof(line))QueueTx(line,(uint16_t)n);
 }
 
+void WirelessControl_SendControlDiagnostics(uint8_t hold,uint32_t uart_faults,
+                                           uint32_t service_gap_ms)
+{
+    char line[40];
+    int n=snprintf(line,sizeof(line),"D,%u,%lu,%lu\n",(unsigned)hold,
+        (unsigned long)uart_faults,(unsigned long)service_gap_ms);
+    if(n>0&&n<(int)sizeof(line))QueueTx(line,(uint16_t)n);
+}
+
 void WirelessControl_SendEncoder(const EncoderFrame *frame)
 {
     char line[96];

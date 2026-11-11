@@ -106,8 +106,8 @@ private:
   size_t headerLength=0, bodyLength=0, sent=0;
 
   void close() {
-    // stop(0) uses the core's default flush timeout.
-    client.stop(1);
+    // Releasing the accepted client lets lwIP close with queued output.
+    // WiFiClient::stop() waits for peer ACKs before closing.
     client=WiFiClient();
     open=false;
   }

@@ -10,16 +10,18 @@
 
 | 部分 | 版本 | 正确入口 |
 |---|---|---|
-| STM32 主控 | V8.13 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
-| 基座 ESP-01S | V4.10 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
+| STM32 主控 | V8.16 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
+| 基座 ESP-01S | V4.11 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.4 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
 | 二维网页 | V8.15 | `project/gimbal-radar-standalone.html` |
 | 三维网页 | V8.15 | `project/gimbal-3d-scan.html` |
 
-`ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部 V8.13 完整接线表为准。
+`ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
 
-V8.15 更新基座 HTTP 分段收发、网页链路状态和摄像头自适应省带宽。更新时重烧基座 V4.10 和摄像头 V1.4，并刷新本仓库的网页。图传默认 5 帧/秒，链路较弱时降低 JPEG 体积并限至约 3 帧/秒。V1.3 的画面方向设置继续沿用，详见 [网络与图传复测](docs/network-and-video.md)。
+V8.16 将体感停车阈值从 55° 调至 75°，30° 起仍按最大 30% PWM 输出。串口接收错误停车后，连续收到有效回中指令才能恢复。更新需重烧 STM32 V8.16 和基座 ESP-01S V4.11。基座遥测可查看无线收包、串口转发和主控诊断。
+
+V8.15 更新基座 HTTP 分段收发、网页链路状态和摄像头自适应省带宽。图传使用摄像头 V1.4 和本仓库的网页。图传默认 5 帧/秒，链路较弱时降低 JPEG 体积并限至约 3 帧/秒。V1.3 的画面方向设置继续沿用，详见 [网络与图传复测](docs/network-and-video.md)。
 
 ## 离线模拟演示与录屏
 
@@ -68,7 +70,7 @@ V8.15 更新基座 HTTP 分段收发、网页链路状态和摄像头自适应�
 
 1. 克隆整个仓库，保持 `project/` 下各网页脚本相对位置。
 2. 每个需要烧录的 ESP 目录中，将 `secrets.example.h` 复制为 `secrets.h`，填入自行设置的 Wi-Fi 密码。当前基座、手持、摄像头必须一致，密码 8–63 个字符。`secrets.h` 已被 Git 忽略；公开仓库不含原项目密码。
-3. STM32：用 Keil 打开 `Gimbal_STLink.uvprojx`，选择 `Gimbal STLink`，Rebuild 后通过 ST-Link 下载。V8.13 使用上表串口接线。
+3. STM32：用 Keil 打开 `Gimbal_STLink.uvprojx`，选择 `Gimbal STLink`，Rebuild 后通过 ST-Link 下载。V8.16 使用上表串口接线。
 4. Arduino IDE：安装指定 ESP8266/ESP32 Core，分别打开对应目录的同名 `.ino`。基座上传速度 115200、CPU 80 MHz、Flash DOUT/40 MHz；手持选 NodeMCU 1.0；摄像头选 AI Thinker ESP32-CAM，按板载下载电路进入烧录模式。详见各固件注释及历史烧录说明中的板卡设置。
 5. 基座启动 `GimbalCtrl` 热点，手持和摄像头连接该热点。电脑/手机也连接同一热点；打开 `http://192.168.4.1` 是基座内置模式控制页。
 6. 完整 2D/3D 扫描界面使用仓库网页。电脑可直接打开上述 HTML；也可在 `project` 中运行 `python -m http.server 8000 --bind 0.0.0.0`，电脑访问 `http://localhost:8000/gimbal-3d-scan.html`，手机访问 `http://电脑在热点中的IP:8000/gimbal-3d-scan.html`。电脑需允许局域网入站访问。手机必须和提供文件的电脑处于同一网络，不能只传单独 HTML。

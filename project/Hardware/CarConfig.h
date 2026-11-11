@@ -19,7 +19,9 @@
 #define CAR_DEADZONE_TENTHS 80
 #define CAR_NEUTRAL_TENTHS 80
 #define CAR_FULL_TILT_TENTHS 300
-#define CAR_UNSAFE_TILT_TENTHS 550
+/* Command output saturates at 30 degrees. Reserve a separate stop threshold
+ * for near-vertical or overturned handsets, with hysteresis during recovery. */
+#define CAR_UNSAFE_TILT_TENTHS 750
 #define CAR_ROLL_ZERO_TENTHS 0
 #define CAR_PITCH_ZERO_TENTHS (-20)
 /* V6.4: physical test showed forward tilt drove backward and left tilt drove
@@ -48,7 +50,7 @@
 #define CAR_TRANSIENT_WINDOW_MS 300U
 #define CAR_RECOVERY_HOLD_MS 40U
 #define CAR_RECOVERY_PACKETS 3U
-#define CAR_RECOVERY_TILT_TENTHS 500
+#define CAR_RECOVERY_TILT_TENTHS 650
 #define CAR_REVERSE_PAUSE_MS 100U
 #define CAR_SLEW_PER_SECOND 1000U
 #if CAR_MAX_PWM_PERMILLE < 1 || CAR_MAX_PWM_PERMILLE > 300

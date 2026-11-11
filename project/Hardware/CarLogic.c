@@ -54,7 +54,7 @@ static int16_t Tilt(int32_t angle)
                     (CAR_FULL_TILT_TENTHS-CAR_DEADZONE_TENTHS));
 }
 void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
-                   uint8_t safe,uint8_t fresh,uint8_t ready,uint32_t packet,
+                   uint8_t safe,uint8_t rx_fault,uint8_t fresh,uint8_t ready,uint32_t packet,
                    int16_t roll,int16_t pitch)
 {
     int32_t r=(int32_t)roll-CAR_ROLL_ZERO_TENTHS;
@@ -66,6 +66,12 @@ void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
     if(!enabled){CarLogic_Stop(s,now,CAR_DISABLED);return;}
     if(!active){CarLogic_Stop(s,now,CAR_INACTIVE);s->have_packet=0;return;}
     if(!safe){CarLogic_Stop(s,now,CAR_FAULT);return;}
+    if(rx_fault) {
+        /* Brake and rearm only on fresh centered frames after the UART fault. */
+        CarLogic_Stop(s,now,CAR_NEUTRAL);
+        if(fresh){s->have_packet=1;s->last_packet=packet;}
+        return;
+    }
     if(!fresh){CarLogic_Stop(s,now,CAR_LINK_LOST);return;}
     if(new_packet){s->have_packet=1;s->last_packet=packet;}
     if(!ready){

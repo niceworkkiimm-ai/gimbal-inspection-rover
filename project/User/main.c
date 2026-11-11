@@ -1,8 +1,10 @@
 /**
- * 项目迭代: V8.13（适配PCB：基座与气体模块串口用途互换）
- * 当前版本: 2D/3D网页V8.15；STM32 V8.13、基座ESP V4.10、手持V1.6、ESP32CAM_Camera V1.4
+ * 项目迭代: V8.16（体感驾驶角度及串口恢复）
+ * 当前版本: 2D/3D网页V8.15；STM32 V8.16、基座ESP V4.11、手持V1.6、ESP32CAM_Camera V1.4
+ * 2026-11-11：STM32 区分倾角限幅和停车，串口接收故障停车后可回中恢复。
+ * 基座 HTTP 关闭不等待确认，遥测增加 UDP、转发和主控诊断。烧录 STM32 和基座 ESP，按下方接线表。
  * 2026-11-10：基座分段处理网页请求，网页显示链路状态和数据年龄，图传弱信号降负载并自动重试。
- * 本次更新基座、摄像头及网页；STM32执行代码、手持端和接线保持原样。
+ * 2026-11-10 更新范围为基座、摄像头及网页。
  * 最近更新: 2026-10-25（网页模拟演示及摄像头画面方向；STM32执行代码未变）
  * 网页V8.14：新增离线模拟演示，五个停车扫描点、轨迹播放/暂停/进度与录屏布局。
  *   - 模拟数据标识保留在路线JSON、CSV及扫描回看中；演示不连接真实设备。
@@ -308,7 +310,7 @@
  *     14 GND     -> GND
  *
  *   底座ESP-01S（USART2，115200/8N1，STM32与ESP双向通信）:
- *     程序          -> ESP01S_Base_UDP.ino V4.10（本次重烧基座 ESP）
+ *     程序          -> ESP01S_Base_UDP.ino V4.11（本次重烧基座 ESP）
  *     VCC、EN/CH_PD -> 稳定3.3V
  *     GND           -> STM32 GND
  *     TX            -> PA3 (USART2_RX，ESP把手持姿态送给STM32)
@@ -317,10 +319,10 @@
  *     原PA9/PA10    -> 撤掉ESP信号线；本版不再初始化USART1，不会在那里输出遥测
  *     PA10-TXD/PA9-RXD跳线帽不再参与ESP通信；可以保持原样，不需要为USART2改动
  *     PA2/PA3       -> 仅接基座ESP；PC10/PC11仅接下方气体模块
- *     先断电核对PCB接线，再重烧STM32 V8.13；VCC/EN/GND接线不变
+ *     先断电核对PCB接线，再重烧STM32 V8.16；VCC/EN/GND接线不变
  *
  *   手持端已换 NodeMCU V3 CH340G（不再用旧ESP-01S手持程序）:
- *     程序 -> NodeMCU_Handheld_MPU_Car.ino V1.6（V8.13不改手持，不需重烧）
+ *     程序 -> NodeMCU_Handheld_MPU_Car.ino V1.6
  *     烧录/供电 -> 板载USB接电脑/稳定5V USB电源；不要往3V3脚接5V
  *     不用USB时 -> 稳定5V正极接VIN、负极接GND；USB与外部5V不同时供电
  *     MPU6050 VCC -> NodeMCU 3V3；GND -> NodeMCU GND
@@ -446,7 +448,7 @@
 #include "WS2812.h"
 #include <math.h>
 
-#define FIRMWARE_VERSION "V8.13"
+#define FIRMWARE_VERSION "V8.16"
 
 /* ========== HC-SR04 ========== */
 #define TRIG_H()  GPIO_SetBits(GPIOC, GPIO_Pin_0)
@@ -1174,12 +1176,16 @@ int main(void)
             int16_t distance_tenths = -10;
             int16_t wheel_pwm[4];
             uint8_t car_state;
+            uint32_t uart_faults, service_gap_ms;
             EncoderFrame encoder;
 
             last_telemetry_cycles = DWT->CYCCNT;
             CarMotor_GetStatus(&car_state, wheel_pwm);
             WirelessControl_SendVehicle(telemetry_sequence, (uint8_t)control_mode,
                                          car_state, wheel_pwm);
+            CarMotor_GetDiagnostics(&uart_faults,&service_gap_ms);
+            WirelessControl_SendControlDiagnostics(CarMotor_GetHoldReason(),
+                                                   uart_faults,service_gap_ms);
             if (have_control_packet || control_mode != WIRELESS_MODE_HANDHELD)
             {
                 /* 网页雷达使用超声波探头的舵机指令角度，而不是手持端原始角度。 */

@@ -34,6 +34,8 @@ WirelessControlMode_t WirelessControl_GetMode(void);
 uint8_t WirelessControl_ConsumeFault(void);
 void WirelessControl_SendVehicle(uint32_t sequence, uint8_t mode, uint8_t state,
                                  const int16_t pwm[4]);
+void WirelessControl_SendControlDiagnostics(uint8_t hold,uint32_t uart_faults,
+                                           uint32_t service_gap_ms);
 void WirelessControl_SendTelemetry(uint32_t sequence,
                                    int16_t roll_tenths,
                                    int16_t pitch_tenths,
