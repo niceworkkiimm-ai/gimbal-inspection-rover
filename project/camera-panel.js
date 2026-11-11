@@ -67,6 +67,23 @@
 
   let active = false, generation = 0, controller = null, timer = 0;
   let currentUrl = '', lastFrameId = '', lastFrameAt = 0, previousFrameAt = 0, failures = 0;
+  let lastVideoEvent = '', lastVideoLogAt = 0, staleReported = false;
+  const diagnosticsPage = location.origin === 'http://127.0.0.1:8767';
+
+  function logVideo(event, details = {}) {
+    if (!diagnosticsPage) return;
+    const now = performance.now();
+    if (event === lastVideoEvent && now - lastVideoLogAt < 2000) return;
+    lastVideoEvent = event;
+    lastVideoLogAt = now;
+    fetch('/api/video', {
+      method:'POST', keepalive:true, headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        event, page:location.pathname.includes('3d') ? '3D' : '2D',
+        requestedFps:Number($('rate').value), ...details
+      })
+    }).catch(() => {});
+  }
   function address() {
     let text = $('address').value.trim();
     if (!text) throw new Error('先填写摄像头串口显示的 IP 地址。');
@@ -96,6 +113,7 @@
     $('tag').textContent = '尚无新帧';
   }
   function stop(text = '画面已关闭 · 不影响原有遥控与扫描', error = false) {
+    if (active) logVideo('stop', {reason:text});
     active = false;
     generation++;
     clearTimeout(timer);
@@ -125,7 +143,11 @@
         stop('已有其他窗口收图。先关闭另一页的视频，等 3 秒再开启。', true);
         return;
       }
-      if (response.status === 429) { nextDelay = 350; return; }
+      if (response.status === 429) {
+        logVideo('error', {reason:'摄像头限频 (429)', fetchMs:Math.round(performance.now() - began)});
+        nextDelay = 350;
+        return;
+      }
       if (!response.ok) throw new Error('摄像头响应 ' + response.status + '；可打开摄像头 /status 检查');
       if (response.headers.get('X-Camera-Version') !== '1.0')
         throw new Error('摄像头接口不匹配，请烧录 ESP32CAM_Camera 兼容固件');
@@ -151,13 +173,19 @@
       $('empty').hidden = true;
       lastFrameId = frameId;
       lastFrameAt = performance.now();
-      const fps = previousFrameAt ? Math.min(99, 1000 / (lastFrameAt - previousFrameAt)).toFixed(1) : '--';
+      const frameGapMs = previousFrameAt ? lastFrameAt - previousFrameAt : null;
+      const fps = frameGapMs ? Math.min(99, 1000 / frameGapMs).toFixed(1) : '--';
       previousFrameAt = lastFrameAt;
       failures = 0;
       $('tag').textContent = '最新画面';
       const elapsed = lastFrameAt - began;
       if (elapsed > 350) liteUntil = lastFrameAt + 12000;
       const lite = response.headers.get('X-Camera-Profile') === 'lite' || lastFrameAt < liteUntil;
+      staleReported = false;
+      logVideo('frame', {
+        fetchMs:Math.round(elapsed), frameAgeMs:Math.round(age),
+        frameGapMs:frameGapMs === null ? null : Math.round(frameGapMs), profile:lite ? 'lite' : 'normal'
+      });
       $('metrics').textContent = fps + ' 帧/秒 · 收图 ' + Math.round(elapsed) + ' ms' + (lite ? ' · 省带宽' : '');
       message('持续收图 · 此耗时不是端到端延迟', 'live');
       // 10帧档至少105ms，留5ms调度余量；等待本次完成，不并发、不补发积压帧。
@@ -170,6 +198,7 @@
       liteUntil = performance.now() + 12000;
       nextDelay = Math.min(3000, 350 * (2 ** Math.min(failures - 1, 4)));
       const reason = error.name === 'AbortError' ? '收图超时' : error.message;
+      logVideo('error', {reason, fetchMs:Math.round(performance.now() - began), failures});
       message('画面中断，请停止驾驶 · ' + reason + ' · 正在自动重连', 'error');
     } finally {
       clearTimeout(deadline);
@@ -198,6 +227,8 @@
     message('正在连接摄像头，与基座遥测连接相互独立');
     try { localStorage.setItem(STORAGE, JSON.stringify({address:origin,rate:$('rate').value})); } catch (_) {}
     const viewer = Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2,'0')).join('');
+    staleReported = false;
+    logVideo('start', {camera:origin});
     poll(generation, origin, viewer);
   }
   $('toggle').addEventListener('click', () => active ? stop() : start());
@@ -217,6 +248,10 @@
     if (!active || !lastFrameAt) return;
     const age = performance.now() - lastFrameAt;
     if (age > 1000) {
+      if (!staleReported) {
+        staleReported = true;
+        logVideo('stale', {reason:'超过 1 秒没有新画面', frameAgeMs:Math.round(age)});
+      }
       clearFrame('画面过期，请停止驾驶');
       $('metrics').textContent = '超过 1 秒没有新画面';
       message('画面过期，不要依赖旧画面驾驶', 'error');

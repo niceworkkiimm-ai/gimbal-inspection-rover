@@ -14,14 +14,18 @@
 | 基座 ESP-01S | V4.11 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.4 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
-| 二维网页 | V8.15 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.15 | `project/gimbal-3d-scan.html` |
+| 二维网页 | V8.17 | `project/gimbal-radar-standalone.html` |
+| 三维网页 | V8.17 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
 
 V8.16 将体感停车阈值从 55° 调至 75°，30° 起仍按最大 30% PWM 输出。串口接收错误停车后，连续收到有效回中指令才能恢复。更新需重烧 STM32 V8.16 和基座 ESP-01S V4.11。基座遥测可查看无线收包、串口转发和主控诊断。
 
 V8.15 更新基座 HTTP 分段收发、网页链路状态和摄像头自适应省带宽。图传使用摄像头 V1.4 和本仓库的网页。图传默认 5 帧/秒，链路较弱时降低 JPEG 体积并限至约 3 帧/秒。V1.3 的画面方向设置继续沿用，详见 [网络与图传复测](docs/network-and-video.md)。
+
+## 自动记录故障
+
+Windows 上双击仓库根目录的 **小车诊断记录.cmd**，再连接小车的 GimbalCtrl 热点。记录器在后台每约一秒采集基座诊断，断网和恢复也会留痕。从记录页面打开 2D/3D 扫描并开启画面时，还会记录实际收图耗时、断流和恢复。日志按天写到 `D:\RoverDiagnostics\logs`。详见 [自动记录与复测](docs/network-and-video.md)。
 
 ## 离线模拟演示与录屏
 

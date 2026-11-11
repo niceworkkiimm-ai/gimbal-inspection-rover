@@ -35,7 +35,7 @@
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.15</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.17</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">风险判断</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
       <section class="panel scene-panel"><div class="scene-head"><strong>三维扫描空间</strong><span>拖动旋转视角 · 滚轮缩放</span></div><div id="scene" aria-label="可旋转的三维障碍物点云"><span class="corner tl">Y 高度<br>X 左右<br>Z 前方</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
@@ -55,7 +55,7 @@
   <script src="vehicle-route.js?v=8.14"></script>
   <script src="route-log.js?v=8.15"></script>
   <script src="wheel-speed-panel.js?v=8.14"></script>
-  <script src="camera-panel.js?v=8.15"></script>
+  <script src="camera-panel.js?v=8.17"></script>
   <script>
     const $ = id => document.getElementById(id), container=$('scene'), profile=$('profile'), pctx=profile.getContext('2d');
     const API_URL='http://192.168.4.1/api/telemetry';

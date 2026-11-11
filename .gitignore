@@ -25,6 +25,7 @@
 *.lst
 *.map
 *.log
+rover-????-??-??.jsonl
 *.build_log.htm
 *.bak
 *.zip
