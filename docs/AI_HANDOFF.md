@@ -32,9 +32,9 @@ ESP32-CAM加入同一热点，网页直接向摄像头取图，不经过STM32串
 | 基座ESP-01S | V4.11 | ESP01S_Base_UDP/ESP01S_Base_UDP.ino |
 | 手持NodeMCU | V1.6 | NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino |
 | 普通AI Thinker ESP32-CAM | V1.4 | ESP32CAM_Camera/ESP32CAM_Camera.ino |
-| 二维网页 | V8.17 | gimbal-radar-standalone.html |
-| 三维网页 | V8.17 | gimbal-3d-scan.html |
-| 离线模拟入口 | V8.14 | 巡检模拟演示.html |
+| 二维网页 | V8.18 | gimbal-radar-standalone.html |
+| 三维网页 | V8.18 | gimbal-3d-scan.html |
+| 离线模拟入口 | V8.18 | 巡检模拟演示.html |
 
 ESP01S_Handheld_MPU_UDP、ESP32S3_Camera等是历史/辅助目录，不是当前整机应烧录的组合。特别注意摄像头实物是普通ESP32-CAM，不是ESP32-S3。
 
@@ -212,4 +212,4 @@ V8.14 已提供本地模拟：
 
 ## 可直接发给新 AI 的开场白
 
-请先阅读 https://github.com/niceworkkiimm-ai/gimbal-inspection-rover 的 README 和 docs/AI_HANDOFF.md，再对照 project/ 及本机实际源码。这个项目是STM32F407ZG巡检小车，包含NodeMCU体感/摇杆手持、ESP-01S基座、超声波云台、气体检测、ESP32-CAM及2D/3D网页。当前参考版本为主控V8.16、基座V4.11、手持V1.6、摄像头V1.4、2D/3D网页V8.17。实车故障可用小车诊断记录工具留痕。尤其注意：基座使用PA2/PA3，气体使用PC10/PC11；自动复走已删除，保存路线和位置扫描快照必须保留；离线模拟数据不是实测；后轮故障和换板结果仍须向我核实。先说明你理解的系统组成和发现的版本差异，再按我后续需求工作。不要重写整个项目，不要将旧聊天中的接线、故障和功能当作当前事实。
+请先阅读 https://github.com/niceworkkiimm-ai/gimbal-inspection-rover 的 README 和 docs/AI_HANDOFF.md，再对照 project/ 及本机实际源码。这个项目是STM32F407ZG巡检小车，包含NodeMCU体感/摇杆手持、ESP-01S基座、超声波云台、气体检测、ESP32-CAM及2D/3D网页。当前参考版本为主控V8.16、基座V4.11、手持V1.6、摄像头V1.4、2D/3D网页V8.18。实车故障可用小车诊断记录工具留痕。尤其注意：基座使用PA2/PA3，气体使用PC10/PC11；自动复走已删除，保存路线和位置扫描快照必须保留；离线模拟数据不是实测；后轮故障和换板结果仍须向我核实。先说明你理解的系统组成和发现的版本差异，再按我后续需求工作。不要重写整个项目，不要将旧聊天中的接线、故障和功能当作当前事实。

@@ -181,12 +181,13 @@
       {name:'一氧化碳 CO',unit:'ppm',concentration:2.1+.4*Math.sin(gasTime*.6)},
       {name:'硫化氢 H₂S',unit:'ppm',concentration:.15+.03*Math.sin(gasTime)}]
       .map((g,i)=>({...g,channel:i+1,online:true,valid:true,statusText:'模拟 · 正常',severity:'normal'}));
-    bridge.frame({sequence,online:true,link:true,roll:point.yaw,pitch:-point.pitch,distance:point.distance,
-      distanceValid:true,ageMs:0,gases},false);
     const rpm=s.rpm.map(n=>Math.round(n*10));
-    root.WheelSpeedPanel.feed({protocol:1,online:true,valid:true,enabled:false,sequence,ageMs:0,
+    const wheelSpeed={protocol:1,online:true,valid:true,enabled:false,sequence,ageMs:0,
       targetRpm10:[0,0,0,0],measuredRpm10:rpm,pwm:s.rpm.map(n=>Math.round(clamp(n*3,-300,300))),
-      signs:CONFIG.signs,cpr:CONFIG.cpr,fault:0,faultWheels:0,limited:0,sampleMs:80});
+      signs:CONFIG.signs,cpr:CONFIG.cpr,fault:0,faultWheels:0,limited:0,sampleMs:80};
+    bridge.frame({sequence,online:true,link:true,roll:point.yaw,pitch:-point.pitch,distance:point.distance,
+      distanceValid:true,ageMs:0,gases,wheelSpeed,wheelPlaybackRate:demo.playing?demo.rate:0},false);
+    root.WheelSpeedPanel.feed(wheelSpeed);
     root.VehicleRoute.presentDemo(demo.route,force?scenario.bounds:null);
     document.getElementById('streamText').textContent='模拟数据 · 离线演示';
     document.getElementById('echoText').textContent='模拟测距 · 非现场采集';
@@ -214,7 +215,7 @@
   demo.pause=function(){demo.playing=false;paint(true);};
   demo.initialize=function(){
     if(initialized)return;initialized=true;document.body.classList.add('demo-mode','demo-recording');
-    document.title='巡检小车 · 模拟演示 V8.14';
+    document.title='巡检小车 · 模拟演示 V8.18';
     const section=document.createElement('section');section.id='rover-demo-controls';
     section.innerHTML=`<style>
       #rover-demo-controls{margin:16px 0 18px;padding:13px 16px;background:#17251e;border:1px solid #41624f;border-radius:7px;color:#edf4ef}

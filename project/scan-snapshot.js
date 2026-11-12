@@ -68,7 +68,7 @@
   function show3D(host, scan) {
     const T = root.THREE;
     if (!T || !T.OrbitControls || !root.GimbalModel || typeof root.GimbalModel.create !== 'function')
-      throw Error('三维回看组件未加载，请保留同目录的 three.min.js、OrbitControls.umd.js 和 gimbal-model.js。');
+      throw Error('三维回看组件未加载，请保留同目录的 three.min.js、OrbitControls.umd.js、rover-model-data.js 和 gimbal-model.js。');
     let renderer;
     try { renderer = new T.WebGLRenderer({antialias: true}); }
     catch (_) { throw Error('无法启动三维回看，请确认浏览器支持 WebGL。'); }
@@ -82,17 +82,17 @@
     scene.add(new T.HemisphereLight(0xcfffe7, 0x07110b, 2.4), new T.GridHelper(800, 16, 0x3b7356, 0x1f3329), new T.AxesHelper(80));
     const key = new T.DirectionalLight(0xd8fff0, 1.5); key.position.set(90, 170, 120); scene.add(key);
     // Each view owns its model resources; closing a saved scan never disposes the live model.
-    const {machine, sensorAxisY: sensorY} = root.GimbalModel.create(T); scene.add(machine);
+    const {machine, pointAt} = root.GimbalModel.create(T); scene.add(machine);
     const geometry = new T.SphereGeometry(2, 12, 8), materials = new Map();
-    const scanBounds=new T.Box3(new T.Vector3(-45,0,-35),new T.Vector3(45,sensorY,35)),fitPoints=[];
-    for(const x of [-45,45])for(const y of [0,sensorY])for(const z of [-35,35])fitPoints.push(new T.Vector3(x,y,z));
+    const scanBounds=new T.Box3().setFromObject(machine),fitPoints=[];
+    const {min,max}=scanBounds;
+    for(const x of [min.x,max.x])for(const y of [min.y,max.y])for(const z of [min.z,max.z])fitPoints.push(new T.Vector3(x,y,z));
     scan.points.forEach(point => {
       const tint = color(point.distance);
       if (!materials.has(tint)) materials.set(tint, new T.MeshBasicMaterial({color: tint}));
       const mesh = new T.Mesh(geometry, materials.get(tint));
       const distance = point.distance <= 60 ? point.distance : 60 + (point.distance - 60) / 90 * 40;
-      const p = projection(distance, point.pitch), yaw = radians(point.yaw);
-      mesh.position.set(p.forward * 4 * Math.sin(yaw), sensorY + p.height * 4, p.forward * 4 * Math.cos(yaw)); scene.add(mesh);
+      mesh.position.copy(pointAt(distance * 4, point.yaw, point.pitch)); scene.add(mesh);
       scanBounds.expandByPoint(mesh.position);
       fitPoints.push(mesh.position.clone());
     });

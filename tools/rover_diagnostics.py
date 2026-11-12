@@ -23,7 +23,7 @@ STATIC = {
     **{name: 'text/html; charset=utf-8' for name in
        ('gimbal-3d-scan.html', 'gimbal-radar-standalone.html')},
     **{name + '.js': 'application/javascript; charset=utf-8' for name in
-       ('three.min', 'OrbitControls.umd', 'gimbal-model', 'scan-snapshot',
+       ('three.min', 'OrbitControls.umd', 'rover-model-data', 'gimbal-model', 'scan-snapshot',
         'vehicle-route', 'route-log', 'wheel-speed-panel', 'camera-panel', 'rover-demo')},
 }
 

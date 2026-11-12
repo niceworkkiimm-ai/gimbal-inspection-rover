@@ -14,10 +14,12 @@
 | 基座 ESP-01S | V4.11 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.4 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
-| 二维网页 | V8.17 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.17 | `project/gimbal-3d-scan.html` |
+| 二维网页 | V8.18 | `project/gimbal-radar-standalone.html` |
+| 三维网页 | V8.18 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
+
+V8.18 实时三维页和扫描快照回看采用矿井演示视频的紫色外壳、麦克纳姆轮和传感器模型。三维页点「查看车身」可近看，四轮分别按编码器测得的有符号转速转动。轮速无效或过期时，模型车轮停止。网页和模型可在本地打开。模型来自「外壳美化 V4」的 CAD 网格及视频补建部件，可用 Blender 和 `tools/export_rover_model.py` 从视频工程重新导出。
 
 V8.16 将体感停车阈值从 55° 调至 75°，30° 起仍按最大 30% PWM 输出。串口接收错误停车后，连续收到有效回中指令才能恢复。更新需重烧 STM32 V8.16 和基座 ESP-01S V4.11。基座遥测可查看无线收包、串口转发和主控诊断。
 

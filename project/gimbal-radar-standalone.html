@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>二维云台雷达 · 巡检行驶轨迹 V8.17</title>
+  <title>二维云台雷达 · 巡检行驶轨迹 V8.18</title>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
   <!-- V8.9 / 2026-09-15: automatic route driving removed; save/open routes and scans retained. MCU V8.9/base V4.9; handheld V1.5/camera V1.2 unchanged. -->
@@ -71,12 +71,13 @@
       <aside class="panel rightbar"><div class="section-label">障碍物列表</div><div id="detections" class="detections"></div><div class="rule"></div><div class="section-label">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="rule"></div><div class="section-label">最近数据帧 <button id="clearFeed" class="clear" type="button">清空</button></div><div class="data-format"><strong id="rawData">等待数据</strong><br><span id="formatHint">距离(cm), 水平角, 俯仰角, 报警</span></div></aside>
     </section>
     <section class="bottom"><section class="panel trend"><div class="trend-head"><div><div class="section-label">距离趋势</div><strong>最近 30 次测距</strong></div><span class="threshold">-- 20 cm 报警线</span></div><canvas id="trend" aria-label="最近三十次距离变化趋势"></canvas></section><aside class="panel feed"><div class="section-label">数据接收日志</div><ul id="feed" class="feed-list"></ul></aside></section>
-    <footer class="footer"><span>V8.17 · 页面只显示 150 cm 内目标 · 近距离放大 · 扫描点保留 5 秒 · 报警阈值 20 cm</span><span id="lastUpdate">更新于 --:--:--</span></footer>
+    <footer class="footer"><span>V8.18 · 页面只显示 150 cm 内目标 · 近距离放大 · 扫描点保留 5 秒 · 报警阈值 20 cm</span><span id="lastUpdate">更新于 --:--:--</span></footer>
   </main>
   <script src="three.min.js?v=8.12"></script>
   <script src="OrbitControls.umd.js?v=8.12"></script>
-  <script src="gimbal-model.js?v=8.12"></script>
-  <script src="scan-snapshot.js?v=8.14"></script>
+  <script src="rover-model-data.js?v=8.18"></script>
+  <script src="gimbal-model.js?v=8.18"></script>
+  <script src="scan-snapshot.js?v=8.18"></script>
   <script src="vehicle-route.js?v=8.14"></script>
   <script src="route-log.js?v=8.15"></script>
   <script src="wheel-speed-panel.js?v=8.14"></script>

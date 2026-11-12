@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>云台三维扫描 · 巡检行驶轨迹 V8.15</title>
+  <title>云台三维扫描 · 巡检行驶轨迹 V8.18</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -35,10 +35,10 @@
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.17</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.18</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">风险判断</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
-      <section class="panel scene-panel"><div class="scene-head"><strong>三维扫描空间</strong><span>拖动旋转视角 · 滚轮缩放</span></div><div id="scene" aria-label="可旋转的三维障碍物点云"><span class="corner tl">Y 高度<br>X 左右<br>Z 前方</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
+      <section class="panel scene-panel"><div class="scene-head"><strong>三维扫描空间</strong><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div><div id="scene" aria-label="可旋转的三维障碍物点云"><span class="corner tl">Y 高度<br>X 左右<br>Z 前方</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
       <aside class="panel side right"><div class="eyebrow">目标列表</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 800</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
     <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>前向截面</strong><span>横轴：0-150 cm · 近距离放大</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
@@ -49,9 +49,10 @@
   <!-- V8.9 / 2026-09-15: automatic route driving removed; save/open routes and scans retained. MCU V8.9/base V4.9; handheld V1.5/camera V1.2 unchanged. -->
   <script src="three.min.js?v=8.14"></script>
   <script src="OrbitControls.umd.js?v=8.14"></script>
-  <script src="gimbal-model.js?v=8.14"></script>
-  <script src="scan-snapshot.js?v=8.14"></script>
-  <script src="rover-demo.js?v=8.14"></script>
+  <script src="rover-model-data.js?v=8.18"></script>
+  <script src="gimbal-model.js?v=8.18"></script>
+  <script src="scan-snapshot.js?v=8.18"></script>
+  <script src="rover-demo.js?v=8.18"></script>
   <script src="vehicle-route.js?v=8.14"></script>
   <script src="route-log.js?v=8.15"></script>
   <script src="wheel-speed-panel.js?v=8.14"></script>
@@ -69,7 +70,8 @@
     const MAX_POINTS=800;
     const ANGLE_CELL_DEG=2;
     const PITCH_AXIS_TO_SENSOR_CM=6.5;
-    const {machine,yawAssembly,pitchAssembly,sensorAxisY:SENSOR_AXIS_Y}=GimbalModel.create(THREE);
+    const rover=GimbalModel.create(THREE);
+    const {machine,yawAssembly,pitchAssembly}=rover;
     const state={distance:0,yaw:0,pitch:0,alarm:false,distanceValid:false,link:false}, points=[], history=[], logs=[], pointCells=new Map();
     let paused=false,polling=false,lastSequence=null,lastLogAt=0;
     const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x0c1310,1); container.appendChild(renderer.domElement);
@@ -78,12 +80,12 @@
     const grid=new THREE.GridHelper(800,16,0x3b7356,0x1f3329);grid.position.y=0;scene.add(grid); const axes=new THREE.AxesHelper(80);scene.add(axes);
     scene.add(machine);
     const pointGeo=new THREE.SphereGeometry(2.0,12,8), current=new THREE.Mesh(new THREE.SphereGeometry(4.0,16,12),new THREE.MeshStandardMaterial({color:0x4bda9a,emissive:0x159b5f,emissiveIntensity:1.6})); current.visible=false; scene.add(current);
-    const beamMat=new THREE.LineBasicMaterial({color:0x4bda9a,transparent:true,opacity:.9}); const beamGeo=new THREE.BufferGeometry(); beamGeo.setFromPoints([new THREE.Vector3(0,SENSOR_AXIS_Y,0),new THREE.Vector3(0,SENSOR_AXIS_Y,100)]); const beam=new THREE.Line(beamGeo,beamMat);beam.visible=false;scene.add(beam);
+    const beamMat=new THREE.LineBasicMaterial({color:0x4bda9a,transparent:true,opacity:.9}); const beamGeo=new THREE.BufferGeometry(); beamGeo.setFromPoints([rover.pointAt(0,0,0),rover.pointAt(100,0,0)]); const beam=new THREE.Line(beamGeo,beamMat);beam.visible=false;scene.add(beam);
     function pitchProjection(distance,pitch){const p=THREE.MathUtils.degToRad(pitch);return {forward:distance*Math.cos(p)-PITCH_AXIS_TO_SENSOR_CM*Math.sin(p),height:distance*Math.sin(p)+PITCH_AXIS_TO_SENSOR_CM*(Math.cos(p)-1)};}
     function rangeRatio(distance){const d=Math.max(0,Math.min(DISPLAY_RANGE_CM,distance));return d<=NEAR_RANGE_CM?d/NEAR_RANGE_CM*NEAR_RANGE_RATIO:NEAR_RANGE_RATIO+(d-NEAR_RANGE_CM)/(DISPLAY_RANGE_CM-NEAR_RANGE_CM)*(1-NEAR_RANGE_RATIO);}
     function heightRatio(height){const sign=height<0?-1:1,value=Math.min(Math.abs(height),HEIGHT_RANGE_CM),ratio=value<=NEAR_RANGE_CM?value/NEAR_RANGE_CM*NEAR_RANGE_RATIO:NEAR_RANGE_RATIO+(value-NEAR_RANGE_CM)/(HEIGHT_RANGE_CM-NEAR_RANGE_CM)*(1-NEAR_RANGE_RATIO);return sign*ratio;}
     function sceneDistance(distance){const d=Math.max(0,Math.min(DISPLAY_RANGE_CM,distance));return d<=NEAR_RANGE_CM?d:NEAR_RANGE_CM+(d-NEAR_RANGE_CM)/(DISPLAY_RANGE_CM-NEAR_RANGE_CM)*(SCENE_FAR_EXTENT_CM-NEAR_RANGE_CM);}
-    function xyz(distance,yaw,pitch){const y=THREE.MathUtils.degToRad(yaw),projection=pitchProjection(sceneDistance(distance),pitch),forward=projection.forward*VISUAL_DISTANCE_SCALE;return new THREE.Vector3(forward*Math.sin(y),SENSOR_AXIS_Y+projection.height*VISUAL_DISTANCE_SCALE,forward*Math.cos(y));}
+    function xyz(distance,yaw,pitch){return rover.pointAt(sceneDistance(distance)*VISUAL_DISTANCE_SCALE,yaw,pitch);}
     function angle(n){return `${n>=0?'+':''}${String(Math.round(n)).padStart(2,'0')} deg`; } function clock(){return new Date().toLocaleTimeString('zh-CN',{hour12:false});}
     function median(values){const sorted=[...values].sort((a,b)=>a-b),middle=Math.floor(sorted.length/2);return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])*.5;}
     function pointColors(distance){const danger=distance<20,caution=distance<40;return {color:danger?0xff6d6d:caution?0xf0b95b:0x4bda9a,emissive:danger?0x7a1111:caution?0x6b4812:0x159b5f};}
@@ -128,9 +130,33 @@ function updateGas(gases) {
     function targets(){const arr=[...points].sort((a,b)=>a.distance-b.distance).slice(0,3);$('targets').innerHTML=arr.map((p,i)=>`<div class="target ${p.distance<20?'danger':p.distance>=40?'safe':''}"><div class="target-head"><strong>目标 ${String(i+1).padStart(2,'0')}</strong><strong>${p.distance.toFixed(1)} cm</strong></div><small>方位 ${angle(p.yaw)} · 高度 ${Math.round(pitchProjection(p.distance,p.pitch).height)} cm</small></div>`).join('');}
     function drawProfile(){const r=profile.getBoundingClientRect(),dpr=Math.min(devicePixelRatio,2),w=Math.max(1,r.width),h=Math.max(1,r.height);profile.width=w*dpr;profile.height=h*dpr;pctx.setTransform(dpr,0,0,dpr,0,0);pctx.clearRect(0,0,w,h);const L=39,R=15,T=15,B=25,oy=(T+h-B)/2,pw=w-L-R,ph=(h-T-B)/2,x=d=>L+rangeRatio(d)*pw,y=v=>oy-heightRatio(v)*ph;pctx.font='11px Segoe UI';[0,20,40,60,100,150].forEach(v=>{pctx.strokeStyle='#304139';pctx.beginPath();pctx.moveTo(x(v),T);pctx.lineTo(x(v),h-B);pctx.stroke();pctx.fillStyle='#92a69a';pctx.fillText(v,x(v)-5,h-7);});[-90,-60,-30,0,30,60,90].forEach(v=>{const py=y(v);pctx.strokeStyle=v===0?'rgba(75,218,154,.7)':'#304139';pctx.beginPath();pctx.moveTo(L,py);pctx.lineTo(w-R,py);pctx.stroke();pctx.fillStyle='#92a69a';pctx.fillText(v,3,py+4);});points.forEach(p=>{const projection=pitchProjection(p.distance,p.pitch);pctx.beginPath();pctx.arc(x(projection.forward),y(projection.height),2.2,0,Math.PI*2);pctx.fillStyle=p.distance<20?'#ff6d6d':p.distance<40?'#f0b95b':'#4bda9a';pctx.fill();});if(!state.distanceValid||!state.link||state.distance>DISPLAY_RANGE_CM)return;const projection=pitchProjection(state.distance,state.pitch),currentColor=state.distance<20?'#ff6d6d':state.distance<40?'#f0b95b':'#4bda9a';pctx.strokeStyle='rgba(75,218,154,.62)';pctx.setLineDash([4,4]);pctx.beginPath();pctx.moveTo(x(projection.forward),oy);pctx.lineTo(x(projection.forward),y(projection.height));pctx.stroke();pctx.setLineDash([]);pctx.beginPath();pctx.arc(x(projection.forward),y(projection.height),4.2,0,Math.PI*2);pctx.fillStyle=currentColor;pctx.shadowColor=currentColor;pctx.shadowBlur=12;pctx.fill();pctx.shadowBlur=0;}
     function addLog(text){if(window.RoverDemo&&window.RoverDemo.enabled)text='模拟: '+text.replace('Wi-Fi: ','');logs.unshift(`<li><time>${clock()}</time>${text}</li>`);if(logs.length>6)logs.pop();$('log').innerHTML=logs.join('');}
-    function update(frame){const yaw=Number(frame.roll),pitch=-Number(frame.pitch),distance=Number(frame.distance),distanceValid=frame.distanceValid===true&&Number.isFinite(distance),link=frame.link===true,inRange=distanceValid&&distance<=DISPLAY_RANGE_CM;if(!Number.isFinite(yaw)||!Number.isFinite(pitch))return;const danger=inRange&&distance<20,caution=inRange&&distance>=20&&distance<40,alarm=danger;Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm,distanceValid,link});yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(pitch);if(!inRange||!link)current.visible=beam.visible=false;$('yaw').textContent=link?angle(yaw):'-- deg';$('pitch').textContent=link?angle(pitch):'-- deg';$('update').textContent=`更新于 ${clock()} · 主控数据年龄 ${Number.isFinite(frame.ageMs)?frame.ageMs+" ms":"--"}`;if(distanceValid){const height=pitchProjection(distance,pitch).height;$('distance').textContent=distance.toFixed(1);$('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';$('height').textContent=link?`${height>=0?'+':''}${height.toFixed(1)} cm`:'-- cm';$('raw').textContent=`${distance.toFixed(1)},${Math.round(yaw)},${Math.round(pitch)},${danger?1:0}`;$('status').textContent=!inRange?'范围外':danger?'报警':caution?'注意':'安全';$('statusDot').className=!inRange?'':danger?'danger':caution?'':'safe';$('sceneReadout').innerHTML=`${distance.toFixed(1)} cm<br>${!inRange?'仅显示150 cm内':link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;if(inRange&&link&&!paused&&frame.sequence!==lastSequence){addPoint(state);history.push(distance);if(history.length>30)history.shift();}}else{$('distance').textContent='--';$('echoText').textContent='未收到有效超声波回波';$('echoText').style.color='var(--muted)';$('height').textContent='-- cm';$('raw').textContent=`--,${Math.round(yaw)},${Math.round(pitch)},0`;$('status').textContent='无回波';$('statusDot').className='';$('sceneReadout').innerHTML=`无有效回波<br>${link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;}if(frame.sequence!==lastSequence&&Date.now()-lastLogAt>=900){lastLogAt=Date.now();addLog(distanceValid?`Wi-Fi: ${distance.toFixed(1)} cm · ${Math.round(yaw)}° · ${Math.round(pitch)}°`:'Wi-Fi: 超声波无有效回波');}lastSequence=frame.sequence;$('pointCount').textContent=`${points.length} / ${MAX_POINTS}`;$('pointFill').style.width=`${points.length/MAX_POINTS*100}%`;targets();drawProfile();}
+    function update(frame){
+      rover.setWheelSpeed(frame.wheelSpeed,performance.now(),frame.wheelPlaybackRate??1);
+      const yaw=Number(frame.roll),pitch=-Number(frame.pitch),distance=Number(frame.distance),distanceValid=frame.distanceValid===true&&Number.isFinite(distance),link=frame.link===true,inRange=distanceValid&&distance<=DISPLAY_RANGE_CM;if(!Number.isFinite(yaw)||!Number.isFinite(pitch))return;const danger=inRange&&distance<20,caution=inRange&&distance>=20&&distance<40,alarm=danger;Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm,distanceValid,link});yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(pitch);if(!inRange||!link)current.visible=beam.visible=false;$('yaw').textContent=link?angle(yaw):'-- deg';$('pitch').textContent=link?angle(pitch):'-- deg';$('update').textContent=`更新于 ${clock()} · 主控数据年龄 ${Number.isFinite(frame.ageMs)?frame.ageMs+" ms":"--"}`;if(distanceValid){const height=pitchProjection(distance,pitch).height;$('distance').textContent=distance.toFixed(1);$('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';$('height').textContent=link?`${height>=0?'+':''}${height.toFixed(1)} cm`:'-- cm';$('raw').textContent=`${distance.toFixed(1)},${Math.round(yaw)},${Math.round(pitch)},${danger?1:0}`;$('status').textContent=!inRange?'范围外':danger?'报警':caution?'注意':'安全';$('statusDot').className=!inRange?'':danger?'danger':caution?'':'safe';$('sceneReadout').innerHTML=`${distance.toFixed(1)} cm<br>${!inRange?'仅显示150 cm内':link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;if(inRange&&link&&!paused&&frame.sequence!==lastSequence){addPoint(state);history.push(distance);if(history.length>30)history.shift();}}else{$('distance').textContent='--';$('echoText').textContent='未收到有效超声波回波';$('echoText').style.color='var(--muted)';$('height').textContent='-- cm';$('raw').textContent=`--,${Math.round(yaw)},${Math.round(pitch)},0`;$('status').textContent='无回波';$('statusDot').className='';$('sceneReadout').innerHTML=`无有效回波<br>${link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;}if(frame.sequence!==lastSequence&&Date.now()-lastLogAt>=900){lastLogAt=Date.now();addLog(distanceValid?`Wi-Fi: ${distance.toFixed(1)} cm · ${Math.round(yaw)}° · ${Math.round(pitch)}°`:'Wi-Fi: 超声波无有效回波');}lastSequence=frame.sequence;$('pointCount').textContent=`${points.length} / ${MAX_POINTS}`;$('pointFill').style.width=`${points.length/MAX_POINTS*100}%`;targets();drawProfile();}
     function resize(){const r=container.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();drawProfile();}
-    function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);} window.addEventListener('resize',resize);resize();animate();
+    function animate(now){
+      requestAnimationFrame(animate);
+      rover.advanceWheels(now);
+      controls.update();
+      renderer.render(scene,camera);
+    }
+    window.addEventListener('resize',resize);resize();requestAnimationFrame(animate);
+    let previousView=null;
+    const roverView=$('roverView');
+    roverView.addEventListener('click',()=>{
+      if(previousView){
+        camera.position.copy(previousView.position);
+        controls.target.copy(previousView.target);
+        previousView=null;
+      }else{
+        previousView={position:camera.position.clone(),target:controls.target.clone()};
+        camera.position.set(176,154,194);
+        controls.target.set(0,70,0);
+      }
+      roverView.textContent=previousView?'返回扫描视角':'查看车身';
+      roverView.setAttribute('aria-pressed',String(!!previousView));
+      controls.update();
+    });
     function setConnectionState(mode){const connected=mode==='online',handheldLost=mode==='handheld';$('streamText').textContent=connected?'基座数据在线':handheldLost?'基座在线，手持端失联':mode==='stm32'?'基座在线，主控数据中断':'未连接基座 ESP';const color=connected?'var(--green)':handheldLost?'var(--red)':'var(--amber)';$('streamDot').style.background=color;$('streamDot').style.boxShadow=`0 0 12px ${color}`;if(mode==='offline'||mode==='stm32'){$('update').textContent=mode==='stm32'?'等待 STM32 新数据':'基座数据已中断';$('echoText').textContent='等待基座 ESP 数据';$('echoText').style.color='var(--muted)';}}
     let telemetryPollAt=0,scanTelemetryAt=0,scanTelemetryOnline=false;
     // Save the filtered visible cloud, without references to live mesh/state objects.
@@ -159,6 +185,7 @@ function updateGas(gases) {
     }
     let telemetryTimer=0, telemetryFailures=0;
     function clearLiveTelemetry(mode){
+        rover.setWheelSpeed(null,performance.now());
         scanTelemetryOnline=false;
         current.visible=beam.visible=false;
         for(const id of ['yaw','pitch','distance','height','raw']) $(id).textContent='--';
@@ -206,8 +233,10 @@ function updateGas(gases) {
       }
     }
     document.addEventListener('visibilitychange',()=>{
-      if(document.hidden)clearTimeout(telemetryTimer);
-      else pollTelemetry();
+      if(document.hidden){
+        clearTimeout(telemetryTimer);
+        rover.setWheelSpeed(null,performance.now());
+      }else pollTelemetry();
     });
     $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'继续记录':'暂停记录';addLog(paused?'点云记录已暂停':'点云记录已继续');});$('clearPoints').addEventListener('click',clearPointCloud);$('connect').addEventListener('click',pollTelemetry);if(!(window.RoverDemo&&window.RoverDemo.enabled))setConnectionState('offline');pollTelemetry();
   </script>

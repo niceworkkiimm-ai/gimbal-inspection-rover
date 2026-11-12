@@ -11,4 +11,5 @@
 *.cmd text eol=crlf
 # Preserve source byte encodings and line endings for read-only mirror checks.
 project/** -text
+project/rover-model-data.js -diff
 *.png binary
