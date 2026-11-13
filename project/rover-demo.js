@@ -152,28 +152,30 @@
   if(!enabled)return;
   const scenario=makeScenario(),origin=Date.now();
   Object.assign(demo,{scenario,time:0,playing:false,rate:1,epoch:0,origin,route:scenario.routeAt(0,origin)});
-  let bridge=null,previousNow=0,lastPaint=-1,lastTerrain=-1,visiblePoint=-1,ui=null,initialized=false;
-  function seek(seconds){demo.time=clamp(seconds,0,scenario.duration);demo.epoch++;lastTerrain=-1;lastPaint=-1;paint(true);}
-  function paint(force){
+  let bridge=null,previousNow=0,lastPaint=-1,ui=null,initialized=false;
+  const shownPoints=scenario.scans.map(()=>0);
+  const scanPhases=scenario.phases.filter(phase=>phase.type==='scan');
+  function seek(seconds){
+    demo.time=clamp(seconds,0,scenario.duration);demo.epoch++;lastPaint=-1;
+    bridge?.clear();shownPoints.fill(0);paint(true,true);
+  }
+  function paint(force,seek=false){
     if(!bridge||!initialized)return;
     const s=scenario.sampleAt(demo.time);
     if(!force&&Math.abs(demo.time-lastPaint)<.075)return;
     lastPaint=demo.time;
     Object.assign(demo.route,scenario.routeAt(demo.time,origin));
-    const completed=scenario.phases.filter(p=>p.type==='scan'&&p.end<=demo.time).length;
-    const terrainIndex=s.station===undefined?clamp(completed-1,0,4):s.station;
-    const scanning=s.phase==='scan',cloudKey=terrainIndex+':'+(scanning?'scan':'hold');
-    const newTerrain=lastTerrain!==cloudKey;
-    if(newTerrain){bridge.clear();lastTerrain=cloudKey;visiblePoint=-1;}
-    const scan=scenario.scans[terrainIndex];
-    const count=scanning?Math.max(1,Math.floor(s.phaseProgress*scan.points.length)):completed?scan.points.length:0;
-    if(count){
-      if(force&&!newTerrain)bridge.clear();
-      const start=force||newTerrain?0:visiblePoint+1;
-      for(let i=start;i<count;i++)bridge.point(scan.points[i]);
-      visiblePoint=count-1;
+    const scanning=s.phase==='scan';
+    for(const [index,phase] of scanPhases.entries()){
+      if(demo.time<phase.start)break;
+      const points=scenario.scans[index].points;
+      const count=demo.time>=phase.end?points.length:
+        Math.max(1,Math.floor((demo.time-phase.start)/(phase.end-phase.start)*points.length));
+      const pose=scenario.checkpoints[index].pose;
+      for(let i=shownPoints[index];i<count;i++)bridge.point(points[i],pose);
+      shownPoints[index]=count;
     }
-    const point=scanning?scan.points[Math.max(0,count-1)]:scan.points[Math.floor(demo.time*4)%scan.points.length];
+    const point=scanning?scenario.scans[s.station].points[shownPoints[s.station]-1]:{yaw:0,pitch:0};
     const sequence=Math.floor(demo.time*1000)+demo.epoch*1000000;
     const gasTime=demo.time*.12;
     const gases=[{name:'甲烷 CH₄',unit:'%LEL',concentration:1.2+.25*Math.sin(gasTime)},
@@ -186,7 +188,7 @@
       targetRpm10:[0,0,0,0],measuredRpm10:rpm,pwm:s.rpm.map(n=>Math.round(clamp(n*3,-300,300))),
       signs:CONFIG.signs,cpr:CONFIG.cpr,fault:0,faultWheels:0,limited:0,sampleMs:80};
     bridge.frame({sequence,online:true,link:true,roll:point.yaw,pitch:-point.pitch,distance:point.distance,
-      distanceValid:true,ageMs:0,gases,wheelSpeed,wheelPlaybackRate:demo.playing?demo.rate:0},false);
+      distanceValid:scanning,ageMs:0,gases,wheelSpeed,wheelPlaybackRate:demo.playing?demo.rate:0},demo.route,seek);
     root.WheelSpeedPanel.feed(wheelSpeed);
     root.VehicleRoute.presentDemo(demo.route,force?scenario.bounds:null);
     document.getElementById('streamText').textContent='模拟数据 · 离线演示';
@@ -215,7 +217,7 @@
   demo.pause=function(){demo.playing=false;paint(true);};
   demo.initialize=function(){
     if(initialized)return;initialized=true;document.body.classList.add('demo-mode','demo-recording');
-    document.title='巡检小车 · 模拟演示 V8.18';
+    document.title='巡检小车 · 模拟演示 V8.19';
     const section=document.createElement('section');section.id='rover-demo-controls';
     section.innerHTML=`<style>
       #rover-demo-controls{margin:16px 0 18px;padding:13px 16px;background:#17251e;border:1px solid #41624f;border-radius:7px;color:#edf4ef}
@@ -251,8 +253,8 @@
       const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='模拟数据_完整巡检路线_五个扫描点.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
-    const footer=document.querySelector('.footer>span');footer.textContent='V8.14 · 模拟路线、测距、气体与轮速，仅用于功能演示';
-    const sceneLabel=document.querySelector('.scene-head strong');sceneLabel.textContent='三维扫描空间 · 模拟数据';
+    const footer=document.querySelector('.footer>span');footer.textContent='V8.19 · 模拟路线、测距、气体与轮速，仅用于功能演示';
+    const sceneLabel=document.querySelector('.scene-head strong');sceneLabel.textContent='三维巡检地图 · 模拟';
     root.addEventListener('gimbal:snapshot-open',()=>{if(demo.playing)demo.pause();});
     if(bridge.view)bridge.view();
     root.dispatchEvent(new Event('resize'));

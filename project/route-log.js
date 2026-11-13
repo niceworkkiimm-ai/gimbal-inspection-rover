@@ -30,6 +30,7 @@
     reset(){
       this.session=null;this.cursor=null;this.previous=null;this.origin=null;
       this.base={x:0,y:0,h:0,d:0,t:0};this.missed=0;this.invalidSamples=0;
+      this.engine.poseHistory.length=0;
       this.engine.logPending=true;this.engine.logBacklog=0;
       this.engine.logMessage='等待车端路线记录';this.changed();
     }
@@ -52,6 +53,7 @@
       }
       if(changed){
         e.restarts++;this.origin=null;this.previous=null;
+        e.poseHistory.length=0;
         this.base={x:e.x,y:e.y,h:e.heading,d:e.distance,t:e.elapsed};
       }
       for(const s of samples){
@@ -72,6 +74,7 @@
           e.elapsed+=dt;e.speed=gap?0:(s[5]-this.previous[5])/dt;
         }
         e.distance=this.base.d+(s[5]-o[5])/1000;
+        e.rememberPose(s[1],gap);
         e.addPoint(gap||!this.previous,gap||!this.previous);
         this.previous=s.slice();this.cursor=s[0];this.session=p.session;
       }

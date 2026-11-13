@@ -35,6 +35,27 @@
       this.restarts=0; this.decimations=0; this.travel=[0,0,0,0];
       this.last=null; this.originTime=Math.max(Date.now(),(this.originTime||0)+1); this.breakNext=true;
       this.pendingWheel=[0,0,0,0];this.pendingMs=0;this.pendingBad=false;
+      this.poseHistory=[];
+    }
+    rememberPose(ms, gap) {
+      this.poseHistory.push({ms, x:this.x, y:this.y, heading:this.heading, gap});
+      if(this.poseHistory.length>64)this.poseHistory.shift();
+    }
+    poseAt(ms) {
+      const history=this.poseHistory;
+      for(let i=history.length-1;i>=0;i--){
+        const a=history[i], dt=(ms-a.ms)>>>0;
+        if(dt>=2147483648)continue;
+        if(dt===0)return a.gap?null:a;
+        const b=history[i+1];
+        if(!b||a.gap||b.gap)return null;
+        const span=(b.ms-a.ms)>>>0;
+        if(!span||span>320||dt>=span)return null;
+        const ratio=dt/span;
+        return {x:a.x+(b.x-a.x)*ratio,y:a.y+(b.y-a.y)*ratio,
+          heading:wrapAngle(a.heading+wrapAngle(b.heading-a.heading)*ratio)};
+      }
+      return null;
     }
     configure(config) {
       if (!validConfig(config)) throw new Error('请填写真实尺寸、每轮一圈计数，并确认四轮方向和X型安装。');
@@ -61,7 +82,7 @@
       if(odo.online!==true){this.online=false;this.speed=0;this.rpm=[0,0,0,0];return;}
       if(this.session!==odo.session) {
         if(this.session!==null) {this.restarts++;this.breakNext=true;}
-        this.session=odo.session;this.last=null;
+        this.session=odo.session;this.last=null;this.poseHistory.length=0;
         this.pendingWheel=[0,0,0,0];this.pendingMs=0;this.pendingBad=false;
       }
       this.online=true;this.errors=Number(odo.errors)||0;
@@ -77,7 +98,10 @@
         this.lastReceived=now;
         if(!this.last) {
           this.last=sample.slice(); this.speed=0;this.rpm=[0,0,0,0];
-          if(validConfig(this.config))this.addPoint(true,true);
+          if(validConfig(this.config)){
+            this.addPoint(true,true);
+            this.rememberPose(sample[1],false);
+          }
           this.breakNext=false;
           continue;
         }
@@ -85,7 +109,7 @@
         this.last=sample.slice();
         if(!dt || dt>=2147483648) {
           this.pendingWheel=[0,0,0,0];this.pendingMs=0;this.pendingBad=false;
-          this.gaps++;this.breakNext=true;this.speed=0;this.rpm=[0,0,0,0];continue;
+          this.gaps++;this.breakNext=true;this.speed=0;this.rpm=[0,0,0,0];this.poseHistory.length=0;continue;
         }
         const ticks=sample.slice(2).map((v,i)=>wrapDelta(v,previous[i+2]));
         if(!validConfig(this.config)) {this.speed=0;continue;}
@@ -103,7 +127,10 @@
         const residual=Math.abs(wheel[0]+wheel[1]-wheel[2]-wheel[3]);
         const bad=this.pendingBad||residual>4*tickM+.15*wheel.reduce((s,v)=>s+Math.abs(v),0);
         this.pendingWheel=[0,0,0,0];this.pendingMs=0;this.pendingBad=false;
-        if(bad){this.gaps++;this.speed=0;this.addPoint(true,true);this.breakNext=true;continue;}
+        if(bad){
+          this.gaps++;this.speed=0;this.addPoint(true,true);this.breakNext=true;
+          this.rememberPose(sample[1],true);continue;
+        }
         const gap=false;
         const dx=(wheel[0]+wheel[1]+wheel[2]+wheel[3])/4;
         const dy=(-wheel[0]+wheel[1]+wheel[2]-wheel[3])/4;
@@ -118,6 +145,7 @@
         const length=Math.hypot(dx,dy);
         this.distance+=length; // Pure turn is zero body-centre travel.
         this.speed=length/(windowMs/1000);
+        this.rememberPose(sample[1],false);
         this.addPoint(gap||this.breakNext,gap||this.breakNext);
         this.breakNext=false;
       }
@@ -137,7 +165,13 @@
       scan.points.length>0&&scan.points.length<=MAX_SCAN_POINTS);
     const points=scan.points.map(p=>{
       check(p&&finite(p.distance,2,150)&&finite(p.yaw,-180,180)&&finite(p.pitch,-180,180));
-      return {distance:p.distance,yaw:p.yaw,pitch:p.pitch};
+      const point={distance:p.distance,yaw:p.yaw,pitch:p.pitch};
+      if(p.position!==undefined){
+        check(scan.kind==='3d'&&Array.isArray(p.position)&&p.position.length===3&&
+          p.position.every(v=>finite(v,-10,10)));
+        point.position=p.position.slice();
+      }
+      return point;
     });
     const copy={kind:scan.kind,points};
     if(scan.dataSource==='simulation')copy.dataSource='simulation';
@@ -581,7 +615,8 @@
       if(!engine.scans.length)engine.reset();
       else{
         // A disappearing log endpoint must not erase unsaved inspection snapshots.
-        engine.last=null;engine.pendingWheel=[0,0,0,0];engine.pendingMs=0;engine.pendingBad=false;
+        engine.last=null;engine.poseHistory.length=0;
+        engine.pendingWheel=[0,0,0,0];engine.pendingMs=0;engine.pendingBad=false;
         engine.breakNext=true;engine.online=false;engine.speed=0;engine.rpm=[0,0,0,0];engine.gaps++;
       }
       refresh();

@@ -92,15 +92,18 @@
       if (!materials.has(tint)) materials.set(tint, new T.MeshBasicMaterial({color: tint}));
       const mesh = new T.Mesh(geometry, materials.get(tint));
       const distance = point.distance <= 60 ? point.distance : 60 + (point.distance - 60) / 90 * 40;
-      mesh.position.copy(pointAt(distance * 4, point.yaw, point.pitch)); scene.add(mesh);
+      if(point.position)mesh.position.fromArray(point.position).multiplyScalar(400);
+      else mesh.position.copy(pointAt(distance * 4, point.yaw, point.pitch));
+      scene.add(mesh);
       scanBounds.expandByPoint(mesh.position);
       fitPoints.push(mesh.position.clone());
     });
+    const worldSnapshot=scan.points.some(point=>point.position);
     const render = () => renderer.render(scene, camera);
     const resize = () => {
       const rect = host.getBoundingClientRect(), w = Math.max(1, rect.width), h = Math.max(1, rect.height);
       renderer.setSize(w, h, false); camera.aspect = w / h;
-      if(scan.dataSource==='simulation'){
+      if(scan.dataSource==='simulation'||worldSnapshot){
         const center=scanBounds.getCenter(new T.Vector3()),direction=camera.position.clone().sub(controls.target).normalize();
         const right=new T.Vector3().crossVectors(camera.up,direction).normalize(),up=new T.Vector3().crossVectors(direction,right).normalize(),tan=Math.tan(T.MathUtils.degToRad(camera.fov/2));
         let distance=150;
@@ -155,7 +158,7 @@
     dialog.querySelector('#scan-snapshot-meta').textContent = new Date(checkpoint.capturedAt).toLocaleString('zh-CN', {hour12: false}) +
       ' · X ' + pose.x.toFixed(2) + ' m · Y ' + pose.y.toFixed(2) + ' m · 航向 ' + (pose.heading * 180 / Math.PI).toFixed(1) + '° · ' + scan.points.length + ' 个扫描点';
     dialog.querySelector('.snapshot-legend').textContent = '红色 <20 cm · 黄色 20–40 cm · 绿色 40–150 cm · 近距离放大显示。' +
-      (scan.kind === '3d' ? '拖动旋转，滚轮或双指缩放。' : '') +
+      (scan.kind === '3d' ? (scan.points.some(p=>p.position)?'图中障碍点保留采集位置。':'')+'拖动旋转，滚轮或双指缩放。' : '') +
       (scan.dataSource==='simulation'?'这是程序生成的模拟地貌，不代表现场实测。':'这是保存时的只读快照。');
     root.dispatchEvent(new CustomEvent('gimbal:snapshot-open'));
     let destroy = () => {}, done = false;

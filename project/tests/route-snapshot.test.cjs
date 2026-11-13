@@ -2,6 +2,7 @@
 // Run: node tests/route-snapshot.test.cjs. No browser, network or hardware access.
 const assert = require('node:assert/strict');
 const { RouteEngine, defaults, captureScan, routeRecord, parseRouteFile } = require('../vehicle-route.js');
+const { Reader, CONFIG_CRC } = require('../route-log.js');
 const now = Date.now() + 1000;
 const copy = value => JSON.parse(JSON.stringify(value));
 let passed = 0, failed = 0;
@@ -44,6 +45,40 @@ check('2D/3D snapshots survive version 2 save/open with their route poses', () =
   assert.equal(record.version, 2);
   assert.deepEqual(parseRouteFile(JSON.stringify(record)), record.route);
   assert.deepEqual(record.route.scans, [first, second]);
+});
+
+check('checkpoint saves measured XYZ without sharing arrays with live data', () => {
+  const route = liveRoute(), value = scan('3d');
+  value.points[0].position = [0.5, -0.1, 1.2];
+  captureScan(route, value, now);
+  value.points[0].position[0] = 7;
+  const record = routeRecord(route, now);
+  assert.deepEqual(parseRouteFile(JSON.stringify(record)).scans[0].scan.points[0].position, [0.5, -0.1, 1.2]);
+  record.route.scans[0].scan.points[0].position = [0.5, 1.2];
+  assert.throws(() => parseRouteFile(JSON.stringify(record)));
+});
+
+check('telemetry pose interpolation handles uint32 wrap and the shortest turn', () => {
+  const route = new RouteEngine(), reader = new Reader(route);
+  route.config.confirmed = true;
+  const ingest = (samples, session = '1-2') => reader.ingest({
+    protocol: 2, session, configCrc: CONFIG_CRC, oldest: 1, newest: samples.at(-1)[0], samples
+  }, now);
+  ingest([[1, 4294967256, 0, 0, 0, 0, 0]]);
+  ingest([[2, 40, 80, 0, 3100, 80, 0], [3, 120, 160, 0, -3100, 160, 0],
+    [4, 200, 160, 0, -3100, 160, 1], [5, 280, 160, 0, -3100, 160, 0]]);
+  assert.equal(route.poseAt(0).x, 0.04);
+  const turn = route.poseAt(80);
+  assert.ok(Math.abs(turn.x - 0.12) < 1e-8);
+  assert.ok(Math.abs(Math.abs(turn.heading) - Math.PI) < 1e-8);
+  assert.equal(route.poseAt(160), null);
+  assert.equal(route.poseAt(200), null);
+  assert.equal(route.poseAt(240), null);
+  assert.equal(route.poseAt(300), null);
+  ingest([[1, 80, 0, 0, 0, 0, 0]], '3-4');
+  assert.equal(route.poseAt(40), null);
+  route.reset();
+  assert.equal(route.poseAt(80), null);
 });
 
 check('capture and export own their data and do not change route points or pose', () => {

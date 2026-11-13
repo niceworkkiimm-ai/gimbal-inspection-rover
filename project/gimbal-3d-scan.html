@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>云台三维扫描 · 巡检行驶轨迹 V8.18</title>
+  <title>三维巡检地图 · V8.19</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -15,7 +15,7 @@
     .distance { font-size:49px; line-height:1; font-weight:600; margin:9px 0 5px; font-variant-numeric:tabular-nums; } .distance span { font-size:17px; color:var(--muted); font-weight:400; } .signal { color:var(--green); font-size:12px; }
     .status { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:7px; } .status strong { display:flex; align-items:center; gap:8px; font-size:15px; } .status i { width:8px; height:8px; border-radius:50%; background:var(--amber); } .status i.safe { background:var(--green); } .status i.danger { background:var(--red); } .status span { color:var(--muted); font-size:12px; }
     .metric-list { display:grid; gap:13px; } .metric { display:flex; justify-content:space-between; align-items:baseline; } .metric span { color:var(--muted); } .metric strong { font-size:17px; font-variant-numeric:tabular-nums; }
-    .scene-panel { min-height:630px; padding:16px; display:flex; flex-direction:column; } .scene-head { display:flex; justify-content:space-between; align-items:center; padding:0 2px 12px; gap:12px; } .scene-head strong { font-size:15px; } .scene-head span { color:var(--muted); font-size:12px; }
+    .scene-panel { min-height:630px; padding:16px; display:flex; flex-direction:column; } .scene-head { display:flex; justify-content:space-between; align-items:center; padding:0 2px 12px; gap:12px; } .scene-head strong { font-size:15px; } .scene-head span { color:var(--muted); font-size:12px; } .scene-tools{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap} .scene-tools [aria-pressed="true"]{border-color:#4bda9a;color:#9af0c6} #mapStatus{min-height:17px;font-size:11px;color:var(--muted);margin:0 2px 7px}
     #scene { flex:1; min-height:0; position:relative; overflow:hidden; border:1px solid rgba(75,218,154,.2); border-radius:5px; background:#0c1310; } #scene canvas { display:block; width:100%; height:100%; } .corner { position:absolute; color:var(--muted); font-size:11px; pointer-events:none; } .corner.tl { left:13px; top:11px; } .corner.br { right:13px; bottom:11px; text-align:right; } .legend { display:flex; align-items:center; flex-wrap:wrap; gap:15px; color:var(--muted); font-size:12px; margin:12px 3px 0; } .legend b { display:inline-block; vertical-align:middle; margin-right:6px; width:8px; height:8px; border-radius:50%; background:var(--amber); } .legend .now { background:var(--green); } .legend .alert { background:var(--red); } .legend .scan { width:14px; height:2px; border-radius:0; background:var(--green); }
     .target-list { display:grid; gap:9px; margin-top:12px; } .target { background:var(--panel-2); border-left:2px solid var(--amber); padding:10px; } .target.danger { border-left-color:var(--red); background:rgba(255,109,109,.10); } .target.safe { border-left-color:var(--green); background:rgba(75,218,154,.08); } .target-head { display:flex; justify-content:space-between; gap:8px; } .target small { display:block; color:var(--muted); margin-top:3px; }
     .gas-list { display:grid; gap:7px; margin-top:12px; } .gas-card { padding:9px 10px; background:var(--panel-2); border-left:2px solid var(--line); } .gas-card.online { border-left-color:var(--green); background:rgba(75,218,154,.08); } .gas-card strong { font-size:14px; } .gas-card small { display:block; color:var(--muted); margin-top:3px; font-size:11px; }
@@ -35,14 +35,14 @@
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.18</span></h1><p class="subtitle">超声波点云 · 三维障碍物监测</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.19</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">风险判断</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
-      <section class="panel scene-panel"><div class="scene-head"><strong>三维扫描空间</strong><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div><div id="scene" aria-label="可旋转的三维障碍物点云"><span class="corner tl">Y 高度<br>X 左右<br>Z 前方</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
-      <aside class="panel side right"><div class="eyebrow">目标列表</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 800</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
+      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
+      <aside class="panel side right"><div class="eyebrow">车前已扫描点</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 6000</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
-    <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>前向截面</strong><span>横轴：0-150 cm · 近距离放大</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
-    <footer class="footer"><span>V8.15 · 仅显示 150 cm 内目标 · 气体数据来自 4MZ-HH4 · 距离单位为厘米</span><span id="update">更新于 --:--:--</span></footer>
+    <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>车身前向截面</strong><span>横轴：0–150 cm · 相对当前车身</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
+    <footer class="footer"><span>V8.19 · 扫描量程显示 150 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
   </main>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
@@ -51,54 +51,187 @@
   <script src="OrbitControls.umd.js?v=8.14"></script>
   <script src="rover-model-data.js?v=8.18"></script>
   <script src="gimbal-model.js?v=8.18"></script>
-  <script src="scan-snapshot.js?v=8.18"></script>
-  <script src="rover-demo.js?v=8.18"></script>
-  <script src="vehicle-route.js?v=8.14"></script>
-  <script src="route-log.js?v=8.15"></script>
+  <script src="scan-snapshot.js?v=8.19"></script>
+  <script src="rover-demo.js?v=8.19"></script>
+  <script src="vehicle-route.js?v=8.19"></script>
+  <script src="route-log.js?v=8.19"></script>
   <script src="wheel-speed-panel.js?v=8.14"></script>
   <script src="camera-panel.js?v=8.17"></script>
   <script>
     const $ = id => document.getElementById(id), container=$('scene'), profile=$('profile'), pctx=profile.getContext('2d');
     const API_URL='http://192.168.4.1/api/telemetry';
-    const VISUAL_DISTANCE_SCALE=4;
-    const DISPLAY_RANGE_CM=150;
-    const PROFILE_RANGE_CM=150;
-    const NEAR_RANGE_CM=60;
-    const NEAR_RANGE_RATIO=.8;
-    const HEIGHT_RANGE_CM=90;
-    const SCENE_FAR_EXTENT_CM=100;
-    const MAX_POINTS=800;
-    const ANGLE_CELL_DEG=2;
-    const PITCH_AXIS_TO_SENSOR_CM=6.5;
+
+    // CAD model and map use one linear scale. Route X is forward and Y is left.
+    const UNITS_PER_METER=400, UNITS_PER_CM=4;
+    const DISPLAY_RANGE_CM=150, NEAR_RANGE_CM=60, NEAR_RANGE_RATIO=.8, HEIGHT_RANGE_CM=90;
+    const MAX_POINTS=6000, VOXEL_SIZE=12, POSE_WAIT_MS=1200;
+    const simulated=window.RoverDemo.enabled;
+    const routeEngine=window.VehicleRoute.engine;
     const rover=GimbalModel.create(THREE);
     const {machine,yawAssembly,pitchAssembly}=rover;
-    const state={distance:0,yaw:0,pitch:0,alarm:false,distanceValid:false,link:false}, points=[], history=[], logs=[], pointCells=new Map();
+    const state={distance:0,yaw:0,pitch:0,alarm:false,distanceValid:false,link:false};
+    const mapPoints=new Map(), slots=[], pendingScans=[], logs=[];
+    let nextSlot=0, latestScan=null, encoderSession=null, originTime=routeEngine.originTime;
+    let activeRoute=routeEngine, routeTrailLast=null, beamAt=0;
+    let follow=true, closeUp=false, lastAnimation=null, previousView=null;
     let paused=false,polling=false,lastSequence=null,lastLogAt=0;
-    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setClearColor(0x0c1310,1); container.appendChild(renderer.domElement);
-    const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(48,1,.1,1800); camera.position.set(300,220,380); const controls=new THREE.OrbitControls(camera,renderer.domElement); controls.target.set(0,65,80); controls.enableDamping=true; controls.dampingFactor=.06; controls.minDistance=120; controls.maxDistance=900; controls.maxPolarAngle=Math.PI*.48;
-    scene.add(new THREE.HemisphereLight(0xcfffe7,0x07110b,2.4)); const key=new THREE.DirectionalLight(0xd8fff0,1.5); key.position.set(90,170,120);scene.add(key);
-    const grid=new THREE.GridHelper(800,16,0x3b7356,0x1f3329);grid.position.y=0;scene.add(grid); const axes=new THREE.AxesHelper(80);scene.add(axes);
-    scene.add(machine);
-    const pointGeo=new THREE.SphereGeometry(2.0,12,8), current=new THREE.Mesh(new THREE.SphereGeometry(4.0,16,12),new THREE.MeshStandardMaterial({color:0x4bda9a,emissive:0x159b5f,emissiveIntensity:1.6})); current.visible=false; scene.add(current);
-    const beamMat=new THREE.LineBasicMaterial({color:0x4bda9a,transparent:true,opacity:.9}); const beamGeo=new THREE.BufferGeometry(); beamGeo.setFromPoints([rover.pointAt(0,0,0),rover.pointAt(100,0,0)]); const beam=new THREE.Line(beamGeo,beamMat);beam.visible=false;scene.add(beam);
-    function pitchProjection(distance,pitch){const p=THREE.MathUtils.degToRad(pitch);return {forward:distance*Math.cos(p)-PITCH_AXIS_TO_SENSOR_CM*Math.sin(p),height:distance*Math.sin(p)+PITCH_AXIS_TO_SENSOR_CM*(Math.cos(p)-1)};}
+    const poseTarget=new THREE.Vector3(), cameraShift=new THREE.Vector3();
+    let headingTarget=0, snapPose=true;
+
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0c1310,1);
+    container.appendChild(renderer.domElement);
+    const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(48,1,1,16000);
+    camera.position.set(300,220,380);
+    const controls=new THREE.OrbitControls(camera,renderer.domElement);
+    controls.target.set(0,65,80);controls.enableDamping=true;controls.dampingFactor=.06;
+    controls.minDistance=120;controls.maxDistance=12000;controls.maxPolarAngle=Math.PI*.49;
+    scene.add(new THREE.HemisphereLight(0xcfffe7,0x07110b,2.4));
+    const key=new THREE.DirectionalLight(0xd8fff0,1.5);key.position.set(90,170,120);scene.add(key);
+    const grid=new THREE.GridHelper(8000,40,0x3b7356,0x263e32);
+    grid.position.y=-1;
+    const startMark=new THREE.Mesh(new THREE.RingGeometry(13,18,32),
+      new THREE.MeshBasicMaterial({color:0x78bfff,side:THREE.DoubleSide}));
+    startMark.rotation.x=-Math.PI/2;startMark.position.y=1;
+    scene.add(grid,startMark,machine);
+
+    const scanPositions=new Float32Array(MAX_POINTS*3), scanColors=new Float32Array(MAX_POINTS*3);
+    const scanGeometry=new THREE.BufferGeometry();
+    const scanPositionAttr=new THREE.BufferAttribute(scanPositions,3).setUsage(THREE.DynamicDrawUsage);
+    const scanColorAttr=new THREE.BufferAttribute(scanColors,3).setUsage(THREE.DynamicDrawUsage);
+    scanGeometry.setAttribute('position',scanPositionAttr);
+    scanGeometry.setAttribute('color',scanColorAttr);
+    scanGeometry.setDrawRange(0,0);
+    const cloud=new THREE.Points(scanGeometry,new THREE.PointsMaterial({
+      vertexColors:true,size:7.5,sizeAttenuation:true
+    }));
+    cloud.name='world-scan-points';cloud.frustumCulled=false;scene.add(cloud);
+    const trail=new THREE.LineSegments(new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({color:0x78bfff,transparent:true,opacity:.88}));
+    trail.name='world-route';trail.position.y=2;scene.add(trail);
+
+    const current=new THREE.Mesh(new THREE.SphereGeometry(4,12,8),
+      new THREE.MeshBasicMaterial({color:0x4bda9a}));
+    const beamGeometry=new THREE.BufferGeometry();
+    const beamPosition=new THREE.BufferAttribute(new Float32Array(6),3).setUsage(THREE.DynamicDrawUsage);
+    beamGeometry.setAttribute('position',beamPosition);
+    const beam=new THREE.Line(beamGeometry,new THREE.LineBasicMaterial({color:0x4bda9a,transparent:true,opacity:.9}));
+    beam.frustumCulled=false;
+    current.visible=beam.visible=false;scene.add(current,beam);
+
     function rangeRatio(distance){const d=Math.max(0,Math.min(DISPLAY_RANGE_CM,distance));return d<=NEAR_RANGE_CM?d/NEAR_RANGE_CM*NEAR_RANGE_RATIO:NEAR_RANGE_RATIO+(d-NEAR_RANGE_CM)/(DISPLAY_RANGE_CM-NEAR_RANGE_CM)*(1-NEAR_RANGE_RATIO);}
     function heightRatio(height){const sign=height<0?-1:1,value=Math.min(Math.abs(height),HEIGHT_RANGE_CM),ratio=value<=NEAR_RANGE_CM?value/NEAR_RANGE_CM*NEAR_RANGE_RATIO:NEAR_RANGE_RATIO+(value-NEAR_RANGE_CM)/(HEIGHT_RANGE_CM-NEAR_RANGE_CM)*(1-NEAR_RANGE_RATIO);return sign*ratio;}
-    function sceneDistance(distance){const d=Math.max(0,Math.min(DISPLAY_RANGE_CM,distance));return d<=NEAR_RANGE_CM?d:NEAR_RANGE_CM+(d-NEAR_RANGE_CM)/(DISPLAY_RANGE_CM-NEAR_RANGE_CM)*(SCENE_FAR_EXTENT_CM-NEAR_RANGE_CM);}
-    function xyz(distance,yaw,pitch){return rover.pointAt(sceneDistance(distance)*VISUAL_DISTANCE_SCALE,yaw,pitch);}
-    function angle(n){return `${n>=0?'+':''}${String(Math.round(n)).padStart(2,'0')} deg`; } function clock(){return new Date().toLocaleTimeString('zh-CN',{hour12:false});}
-    function median(values){const sorted=[...values].sort((a,b)=>a-b),middle=Math.floor(sorted.length/2);return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])*.5;}
-    function pointColors(distance){const danger=distance<20,caution=distance<40;return {color:danger?0xff6d6d:caution?0xf0b95b:0x4bda9a,emissive:danger?0x7a1111:caution?0x6b4812:0x159b5f};}
-    function clearOld(){while(points.length>MAX_POINTS){const old=points.shift();if(pointCells.get(old.cellKey)===old)pointCells.delete(old.cellKey);scene.remove(old.mesh);old.mesh.material.dispose();}}
-    function addPoint(frame){
-      const origin=xyz(0,frame.yaw,frame.pitch),pos=xyz(frame.distance,frame.yaw,frame.pitch),colors=pointColors(frame.distance);
-      current.visible=beam.visible=true;current.position.copy(pos);current.material.color.setHex(colors.color);current.material.emissive.setHex(colors.emissive);
-      beam.geometry.setFromPoints([origin,pos]);beam.geometry.attributes.position.needsUpdate=true;
-      const cellKey=`${Math.round(frame.yaw/ANGLE_CELL_DEG)},${Math.round(frame.pitch/ANGLE_CELL_DEG)}`,existing=pointCells.get(cellKey);
-      if(existing){existing.samples.push(frame.distance);if(existing.samples.length>5)existing.samples.shift();const distance=median(existing.samples),filteredPos=xyz(distance,frame.yaw,frame.pitch),filteredColors=pointColors(distance);Object.assign(existing,frame,{distance,pos:filteredPos});current.position.copy(filteredPos);existing.mesh.position.copy(filteredPos);existing.mesh.material.color.setHex(filteredColors.color);existing.mesh.material.emissive.setHex(filteredColors.emissive);return;}
-      const mat=new THREE.MeshStandardMaterial({color:colors.color,emissive:colors.emissive,emissiveIntensity:.65,roughness:.5}),mesh=new THREE.Mesh(pointGeo,mat),point={...frame,pos,mesh,cellKey,samples:[frame.distance]};mesh.position.copy(pos);scene.add(mesh);points.push(point);pointCells.set(cellKey,point);clearOld();
+    const yawAxis=new THREE.Vector3(0,1,0);
+    const worldPosition=pose=>new THREE.Vector3(pose.y*UNITS_PER_METER,0,pose.x*UNITS_PER_METER);
+    function localPoint(distance,yaw,pitch){return rover.pointAt(distance*UNITS_PER_CM,yaw,pitch);}
+    function worldPoint(frame,pose){
+      return localPoint(frame.distance,frame.yaw,frame.pitch)
+        .applyAxisAngle(yawAxis,pose.heading).add(worldPosition(pose));
     }
-    function clearPointCloud(){while(points.length){const point=points.pop();scene.remove(point.mesh);point.mesh.material.dispose();}pointCells.clear();history.length=0;current.visible=beam.visible=false;$('pointCount').textContent=`0 / ${MAX_POINTS}`;$('pointFill').style.width='0%';targets();drawProfile();addLog('点云已清空');}
+    function angle(n){return (n>=0?'+':'')+String(Math.round(n)).padStart(2,'0')+' deg';}
+    function clock(){return new Date().toLocaleTimeString('zh-CN',{hour12:false});}
+    const distanceColor=distance=>distance<20?0xff6d6d:distance<40?0xf0b95b:0x4bda9a;
+    function showBeam(frame,pose){
+      const origin=worldPoint({...frame,distance:0},pose);
+      const hit=worldPoint(frame,pose);
+      beamAt=Date.now();current.visible=beam.visible=true;
+      current.position.copy(hit);current.material.color.setHex(distanceColor(frame.distance));
+      beamPosition.setXYZ(0,origin.x,origin.y,origin.z);
+      beamPosition.setXYZ(1,hit.x,hit.y,hit.z);
+      beamPosition.needsUpdate=true;
+    }
+    function updateCloud(){
+      scanGeometry.setDrawRange(0,mapPoints.size);
+      scanPositionAttr.needsUpdate=scanColorAttr.needsUpdate=true;
+      $('pointCount').textContent=mapPoints.size+' / '+MAX_POINTS;
+      $('pointFill').style.width=mapPoints.size/MAX_POINTS*100+'%';
+    }
+    function addPoint(frame,pose){
+      const pos=worldPoint(frame,pose);
+      const cell=pos.toArray().map(n=>Math.floor(n/VOXEL_SIZE)).join(',');
+      if(mapPoints.has(cell))return;
+      const slot=nextSlot;
+      if(slots[slot]!==undefined)mapPoints.delete(slots[slot]);
+      slots[slot]=cell;nextSlot=(slot+1)%MAX_POINTS;
+      mapPoints.set(cell,{distance:frame.distance,yaw:frame.yaw,pitch:frame.pitch,pos});
+      pos.toArray(scanPositions,slot*3);
+      new THREE.Color(distanceColor(frame.distance)).toArray(scanColors,slot*3);
+      updateCloud();
+    }
+    function clearPointCloud(){
+      mapPoints.clear();slots.length=0;nextSlot=0;pendingScans.length=0;latestScan=null;
+      current.visible=beam.visible=false;updateCloud();
+    }
+    function routeReady(now){
+      return routeEngine.config.confirmed&&routeEngine.online&&
+        now-routeEngine.lastReceived<=POSE_WAIT_MS&&(!routeEngine.nativeLog||!routeEngine.logPending)&&
+        routeEngine.poseHistory.length>0;
+    }
+    function registerScans(now){
+      if(paused||!routeReady(now))return;
+      for(let i=0;i<pendingScans.length;){
+        const scan=pendingScans[i];
+        const expired=now-scan.at>POSE_WAIT_MS;
+        const pose=expired?null:routeEngine.poseAt(scan.ms);
+        if(pose){
+          addPoint(scan,pose);
+          if(latestScan?.sequence===scan.sequence&&state.distanceValid&&state.link&&state.distance<=DISPLAY_RANGE_CM)showBeam(scan,pose);
+        }
+        if(pose||expired)pendingScans.splice(i,1);
+        else i++;
+      }
+    }
+    function queueScan(frame,reading){
+      const odometry=frame.odometry;
+      if(!odometry||odometry.online!==true||!Number.isInteger(frame.sequence)||!routeEngine.config.confirmed)return;
+      const now=Date.now(),age=Number.isFinite(frame.ageMs)?Math.max(0,frame.ageMs):0;
+      if(age>POSE_WAIT_MS)return;
+      const sequence=frame.sequence>>>0;
+      if(!latestScan||latestScan.sequence!==sequence)latestScan={...reading,sequence,at:now-age};
+      if(latestScan.queued)return;
+      // STM32 sends T(seq), then E1(seq+1) with the MCU uptime from that cycle.
+      const sample=Array.isArray(odometry.samples)&&odometry.samples.find(sample=>
+        Array.isArray(sample)&&sample[0]===((sequence+1)>>>0));
+      if(!sample||!Number.isInteger(sample[1]))return;
+      latestScan.queued=true;
+      pendingScans.push({...latestScan,ms:sample[1]});
+      if(pendingScans.length>24)pendingScans.shift();
+    }
+    function updateTrail(route){
+      const points=route.points,last=points.at(-1);
+      if(last===routeTrailLast)return;
+      routeTrailLast=last;
+      const segments=[];
+      for(let i=1;i<points.length;i++){
+        if(points[i].gap)continue;
+        for(const point of [points[i-1],points[i]])
+          segments.push(point.y*UNITS_PER_METER,0,point.x*UNITS_PER_METER);
+      }
+      const next=new THREE.BufferGeometry();
+      next.setAttribute('position',new THREE.Float32BufferAttribute(segments,3));
+      trail.geometry.dispose();trail.geometry=next;
+    }
+    function refreshWorld(route=routeEngine){
+      activeRoute=route;
+      if(!simulated&&route.originTime!==originTime){
+        originTime=route.originTime;clearPointCloud();snapPose=true;
+      }
+      const now=Date.now();
+      const ready=simulated||routeReady(now);
+      if(ready){
+        poseTarget.copy(worldPosition(route));
+        headingTarget=route.heading;
+      }else if(!route.points.length){
+        poseTarget.set(0,0,0);headingTarget=0;
+      }
+      if(!simulated)registerScans(now);
+      const status=simulated?'离线演示 · 各站扫描点留在采集位置':!route.config.confirmed?
+        '请在下方「路线标定」确认四轮参数后启用地图':!ready?
+        '等待路线同步 · 已记录点位保留':route.gaps||route.restarts?
+        '轮编码器估算 · 路线有缺口，点位可能偏移':'轮编码器估算 · 扫描点固定在地图上';
+      if($('mapStatus').textContent!==status)$('mapStatus').textContent=status;
+      updateTrail(route);
+    }
 function updateGas(gases) {
   const grid = document.getElementById('gasList');
   if (!grid) return;
@@ -127,56 +260,202 @@ function updateGas(gases) {
     grid.append(card);
   });
 }
-    function targets(){const arr=[...points].sort((a,b)=>a.distance-b.distance).slice(0,3);$('targets').innerHTML=arr.map((p,i)=>`<div class="target ${p.distance<20?'danger':p.distance>=40?'safe':''}"><div class="target-head"><strong>目标 ${String(i+1).padStart(2,'0')}</strong><strong>${p.distance.toFixed(1)} cm</strong></div><small>方位 ${angle(p.yaw)} · 高度 ${Math.round(pitchProjection(p.distance,p.pitch).height)} cm</small></div>`).join('');}
-    function drawProfile(){const r=profile.getBoundingClientRect(),dpr=Math.min(devicePixelRatio,2),w=Math.max(1,r.width),h=Math.max(1,r.height);profile.width=w*dpr;profile.height=h*dpr;pctx.setTransform(dpr,0,0,dpr,0,0);pctx.clearRect(0,0,w,h);const L=39,R=15,T=15,B=25,oy=(T+h-B)/2,pw=w-L-R,ph=(h-T-B)/2,x=d=>L+rangeRatio(d)*pw,y=v=>oy-heightRatio(v)*ph;pctx.font='11px Segoe UI';[0,20,40,60,100,150].forEach(v=>{pctx.strokeStyle='#304139';pctx.beginPath();pctx.moveTo(x(v),T);pctx.lineTo(x(v),h-B);pctx.stroke();pctx.fillStyle='#92a69a';pctx.fillText(v,x(v)-5,h-7);});[-90,-60,-30,0,30,60,90].forEach(v=>{const py=y(v);pctx.strokeStyle=v===0?'rgba(75,218,154,.7)':'#304139';pctx.beginPath();pctx.moveTo(L,py);pctx.lineTo(w-R,py);pctx.stroke();pctx.fillStyle='#92a69a';pctx.fillText(v,3,py+4);});points.forEach(p=>{const projection=pitchProjection(p.distance,p.pitch);pctx.beginPath();pctx.arc(x(projection.forward),y(projection.height),2.2,0,Math.PI*2);pctx.fillStyle=p.distance<20?'#ff6d6d':p.distance<40?'#f0b95b':'#4bda9a';pctx.fill();});if(!state.distanceValid||!state.link||state.distance>DISPLAY_RANGE_CM)return;const projection=pitchProjection(state.distance,state.pitch),currentColor=state.distance<20?'#ff6d6d':state.distance<40?'#f0b95b':'#4bda9a';pctx.strokeStyle='rgba(75,218,154,.62)';pctx.setLineDash([4,4]);pctx.beginPath();pctx.moveTo(x(projection.forward),oy);pctx.lineTo(x(projection.forward),y(projection.height));pctx.stroke();pctx.setLineDash([]);pctx.beginPath();pctx.arc(x(projection.forward),y(projection.height),4.2,0,Math.PI*2);pctx.fillStyle=currentColor;pctx.shadowColor=currentColor;pctx.shadowBlur=12;pctx.fill();pctx.shadowBlur=0;}
-    function addLog(text){if(window.RoverDemo&&window.RoverDemo.enabled)text='模拟: '+text.replace('Wi-Fi: ','');logs.unshift(`<li><time>${clock()}</time>${text}</li>`);if(logs.length>6)logs.pop();$('log').innerHTML=logs.join('');}
+
+    function nearbyPoints(){
+      const origin=worldPosition(activeRoute);
+      const sensor=localPoint(0,0,0);
+      const nearby=[];
+      for(const point of mapPoints.values()){
+        const pos=point.pos.clone().sub(origin);
+        if(pos.x*pos.x+pos.z*pos.z>((DISPLAY_RANGE_CM+40)*UNITS_PER_CM)**2)continue;
+        pos.applyAxisAngle(yawAxis,-activeRoute.heading).sub(sensor);
+        const distance=pos.length()/UNITS_PER_CM;
+        if(pos.z>=0&&distance<=DISPLAY_RANGE_CM)nearby.push({
+          distance,forward:pos.z/UNITS_PER_CM,height:pos.y/UNITS_PER_CM,
+          yaw:THREE.MathUtils.radToDeg(Math.atan2(pos.x,pos.z))
+        });
+      }
+      return nearby;
+    }
+    function targets(nearby){
+      const closest=[...nearby].sort((a,b)=>a.distance-b.distance).slice(0,3);
+      $('targets').innerHTML=closest.map((p,i)=>{
+        const level=p.distance<20?'danger':p.distance>=40?'safe':'';
+        return '<div class="target '+level+'"><div class="target-head"><strong>目标 '+(i+1)+
+          '</strong><strong>'+p.distance.toFixed(1)+' cm</strong></div><small>方位 '+angle(p.yaw)+
+          ' · 高度 '+Math.round(p.height)+' cm</small></div>';
+      }).join('');
+    }
+    function drawProfile(nearby=nearbyPoints()){
+      const r=profile.getBoundingClientRect(),dpr=Math.min(devicePixelRatio,2);
+      const w=Math.max(1,r.width),h=Math.max(1,r.height);
+      profile.width=w*dpr;profile.height=h*dpr;pctx.setTransform(dpr,0,0,dpr,0,0);
+      const L=39,R=15,T=15,B=25,oy=(T+h-B)/2,pw=w-L-R,ph=(h-T-B)/2;
+      const x=d=>L+rangeRatio(d)*pw,y=v=>oy-heightRatio(v)*ph;
+      pctx.font='11px Segoe UI';pctx.fillStyle='#92a69a';pctx.strokeStyle='#304139';
+      for(const v of [0,20,40,60,100,150]){
+        pctx.beginPath();pctx.moveTo(x(v),T);pctx.lineTo(x(v),h-B);pctx.stroke();pctx.fillText(v,x(v)-5,h-7);
+      }
+      for(const v of [-90,-60,-30,0,30,60,90]){
+        pctx.strokeStyle=v===0?'#4bda9a':'#304139';
+        pctx.beginPath();pctx.moveTo(L,y(v));pctx.lineTo(w-R,y(v));pctx.stroke();pctx.fillText(v,3,y(v)+4);
+      }
+      for(const point of nearby){
+        pctx.beginPath();pctx.arc(x(point.forward),y(point.height),2.2,0,Math.PI*2);
+        pctx.fillStyle='#'+distanceColor(point.distance).toString(16);pctx.fill();
+      }
+      if(!state.distanceValid||!state.link||state.distance>DISPLAY_RANGE_CM)return;
+      const currentPoint=localPoint(state.distance,state.yaw,state.pitch);
+      const origin=localPoint(0,0,0);
+      const endX=x((currentPoint.z-origin.z)/UNITS_PER_CM);
+      const endY=y((currentPoint.y-origin.y)/UNITS_PER_CM);
+      pctx.strokeStyle='#4bda9a';pctx.setLineDash([4,4]);pctx.beginPath();
+      pctx.moveTo(L,oy);pctx.lineTo(endX,endY);pctx.stroke();pctx.setLineDash([]);
+    }
+    function addLog(text){
+      if(simulated)text='模拟: '+text.replace('Wi-Fi: ','');
+      logs.unshift('<li><time>'+clock()+'</time>'+text+'</li>');
+      if(logs.length>6)logs.pop();$('log').innerHTML=logs.join('');
+    }
     function update(frame){
       rover.setWheelSpeed(frame.wheelSpeed,performance.now(),frame.wheelPlaybackRate??1);
-      const yaw=Number(frame.roll),pitch=-Number(frame.pitch),distance=Number(frame.distance),distanceValid=frame.distanceValid===true&&Number.isFinite(distance),link=frame.link===true,inRange=distanceValid&&distance<=DISPLAY_RANGE_CM;if(!Number.isFinite(yaw)||!Number.isFinite(pitch))return;const danger=inRange&&distance<20,caution=inRange&&distance>=20&&distance<40,alarm=danger;Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm,distanceValid,link});yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(pitch);if(!inRange||!link)current.visible=beam.visible=false;$('yaw').textContent=link?angle(yaw):'-- deg';$('pitch').textContent=link?angle(pitch):'-- deg';$('update').textContent=`更新于 ${clock()} · 主控数据年龄 ${Number.isFinite(frame.ageMs)?frame.ageMs+" ms":"--"}`;if(distanceValid){const height=pitchProjection(distance,pitch).height;$('distance').textContent=distance.toFixed(1);$('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';$('height').textContent=link?`${height>=0?'+':''}${height.toFixed(1)} cm`:'-- cm';$('raw').textContent=`${distance.toFixed(1)},${Math.round(yaw)},${Math.round(pitch)},${danger?1:0}`;$('status').textContent=!inRange?'范围外':danger?'报警':caution?'注意':'安全';$('statusDot').className=!inRange?'':danger?'danger':caution?'':'safe';$('sceneReadout').innerHTML=`${distance.toFixed(1)} cm<br>${!inRange?'仅显示150 cm内':link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;if(inRange&&link&&!paused&&frame.sequence!==lastSequence){addPoint(state);history.push(distance);if(history.length>30)history.shift();}}else{$('distance').textContent='--';$('echoText').textContent='未收到有效超声波回波';$('echoText').style.color='var(--muted)';$('height').textContent='-- cm';$('raw').textContent=`--,${Math.round(yaw)},${Math.round(pitch)},0`;$('status').textContent='无回波';$('statusDot').className='';$('sceneReadout').innerHTML=`无有效回波<br>${link?`${angle(yaw)} / ${angle(pitch)}`:'手持端失联'}`;}if(frame.sequence!==lastSequence&&Date.now()-lastLogAt>=900){lastLogAt=Date.now();addLog(distanceValid?`Wi-Fi: ${distance.toFixed(1)} cm · ${Math.round(yaw)}° · ${Math.round(pitch)}°`:'Wi-Fi: 超声波无有效回波');}lastSequence=frame.sequence;$('pointCount').textContent=`${points.length} / ${MAX_POINTS}`;$('pointFill').style.width=`${points.length/MAX_POINTS*100}%`;targets();drawProfile();}
-    function resize(){const r=container.getBoundingClientRect();renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();drawProfile();}
+      const yaw=Number(frame.roll),pitch=-Number(frame.pitch),distance=Number(frame.distance);
+      if(!Number.isFinite(yaw)||!Number.isFinite(pitch))return;
+      const link=frame.link===true,distanceValid=frame.distanceValid===true&&Number.isFinite(distance);
+      const inRange=distanceValid&&distance>=2&&distance<=DISPLAY_RANGE_CM;
+      const danger=inRange&&distance<20,caution=inRange&&distance<40;
+      Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm:danger,distanceValid,link});
+      yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);
+      pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(pitch);
+      if(!inRange||!link)current.visible=beam.visible=false;
+      else if(simulated||!routeEngine.config.confirmed)showBeam(state,activeRoute);
+      else if(!paused){
+        queueScan(frame,state);
+        registerScans(Date.now());
+      }
+      $('yaw').textContent=link?angle(yaw):'-- deg';
+      $('pitch').textContent=link?angle(pitch):'-- deg';
+      $('update').textContent='更新于 '+clock()+' · 主控数据年龄 '+(Number.isFinite(frame.ageMs)?frame.ageMs+' ms':'--');
+      if(distanceValid){
+        const height=(localPoint(distance,yaw,pitch).y-localPoint(0,0,0).y)/UNITS_PER_CM;
+        $('distance').textContent=distance.toFixed(1);
+        $('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';
+        $('height').textContent=link?height.toFixed(1)+' cm':'-- cm';
+        $('raw').textContent=[distance.toFixed(1),Math.round(yaw),Math.round(pitch),danger?1:0].join(',');
+        $('status').textContent=!inRange?'范围外':danger?'报警':caution?'注意':'安全';
+        $('statusDot').className=!inRange?'':danger?'danger':caution?'':'safe';
+        $('sceneReadout').innerHTML=distance.toFixed(1)+' cm<br>'+(!inRange?'仅显示150 cm内':link?angle(yaw)+' / '+angle(pitch):'手持端失联');
+      }else{
+        $('distance').textContent='--';$('echoText').textContent='未收到有效超声波回波';
+        $('echoText').style.color='var(--muted)';$('height').textContent='-- cm';
+        $('raw').textContent=['--',Math.round(yaw),Math.round(pitch),0].join(',');
+        $('status').textContent='无回波';$('statusDot').className='';
+        $('sceneReadout').innerHTML='无有效回波<br>'+(link?angle(yaw)+' / '+angle(pitch):'手持端失联');
+      }
+      if(frame.sequence!==lastSequence&&Date.now()-lastLogAt>=900){
+        lastLogAt=Date.now();
+        addLog(distanceValid?'Wi-Fi: '+distance.toFixed(1)+' cm · '+Math.round(yaw)+'° · '+Math.round(pitch)+'°':'Wi-Fi: 超声波无有效回波');
+      }
+      lastSequence=frame.sequence;
+      const nearby=nearbyPoints();targets(nearby);drawProfile(nearby);
+    }
+    function resize(){
+      const r=container.getBoundingClientRect();
+      renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);
+      camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix();
+      drawProfile();
+    }
     function animate(now){
       requestAnimationFrame(animate);
-      rover.advanceWheels(now);
-      controls.update();
-      renderer.render(scene,camera);
-    }
-    window.addEventListener('resize',resize);resize();requestAnimationFrame(animate);
-    let previousView=null;
-    const roverView=$('roverView');
-    roverView.addEventListener('click',()=>{
-      if(previousView){
-        camera.position.copy(previousView.position);
-        controls.target.copy(previousView.target);
-        previousView=null;
-      }else{
-        previousView={position:camera.position.clone(),target:controls.target.clone()};
-        camera.position.set(176,154,194);
-        controls.target.set(0,70,0);
+      const elapsed=lastAnimation===null?0:Math.min(50,now-lastAnimation);
+      lastAnimation=now;rover.advanceWheels(now);
+      const step=snapPose?1:1-Math.exp(-elapsed/105);
+      cameraShift.copy(machine.position);
+      machine.position.lerp(poseTarget,step);
+      const turn=headingTarget-machine.rotation.y;
+      machine.rotation.y+=Math.atan2(Math.sin(turn),Math.cos(turn))*step;
+      snapPose=false;
+      if(!simulated&&current.visible&&Date.now()-beamAt>750)current.visible=beam.visible=false;
+      if(follow){
+        cameraShift.subVectors(machine.position,cameraShift);
+        camera.position.add(cameraShift);controls.target.add(cameraShift);
       }
-      roverView.textContent=previousView?'返回扫描视角':'查看车身';
-      roverView.setAttribute('aria-pressed',String(!!previousView));
+      controls.update();renderer.render(scene,camera);
+    }
+    function setFollow(value){
+      follow=value;
+      $('followRover').setAttribute('aria-pressed',String(value));
+    }
+    function cameraAtCar(offset,height,forward){
+      const center=machine.position;
+      camera.position.copy(center).add(new THREE.Vector3(...offset));
+      controls.target.copy(center).add(new THREE.Vector3(0,height,forward));
+      controls.update();
+    }
+    $('followRover').addEventListener('click',()=>{
+      setFollow(!follow);
+      if(follow&&!closeUp)cameraAtCar([360,280,470],75,90);
+    });
+    const roverView=$('roverView');
+    function setCloseUp(value){
+      closeUp=value;
+      roverView.textContent=value?'返回地图视角':'查看车身';
+      roverView.setAttribute('aria-pressed',String(value));
+    }
+    roverView.addEventListener('click',()=>{
+      if(closeUp){
+        const shift=previousView.follow?machine.position.clone().sub(previousView.car):new THREE.Vector3();
+        camera.position.copy(previousView.position).add(shift);
+        controls.target.copy(previousView.target).add(shift);
+        setFollow(previousView.follow);setCloseUp(false);
+      }else{
+        previousView={follow,position:camera.position.clone(),target:controls.target.clone(),car:machine.position.clone()};
+        setCloseUp(true);setFollow(true);cameraAtCar([176,154,194],70,0);
+      }
       controls.update();
     });
+    $('overview').addEventListener('click',()=>{
+      const bounds=new THREE.Box3().setFromObject(machine);
+      bounds.expandByPoint(startMark.position);
+      for(const point of activeRoute.points)bounds.expandByPoint(worldPosition(point));
+      for(const point of mapPoints.values())bounds.expandByPoint(point.pos);
+      const center=bounds.getCenter(new THREE.Vector3()),size=bounds.getSize(new THREE.Vector3());
+      const halfFov=THREE.MathUtils.degToRad(camera.fov/2);
+      const distance=Math.min(11500,Math.max(390,size.length()*.55/Math.tan(halfFov)/Math.min(1,camera.aspect)));
+      setCloseUp(false);setFollow(false);
+      controls.target.copy(center);
+      camera.position.copy(center).addScaledVector(new THREE.Vector3(.62,.8,1).normalize(),distance);
+      controls.update();
+    });
+    window.addEventListener('resize',resize);resize();requestAnimationFrame(animate);
     function setConnectionState(mode){const connected=mode==='online',handheldLost=mode==='handheld';$('streamText').textContent=connected?'基座数据在线':handheldLost?'基座在线，手持端失联':mode==='stm32'?'基座在线，主控数据中断':'未连接基座 ESP';const color=connected?'var(--green)':handheldLost?'var(--red)':'var(--amber)';$('streamDot').style.background=color;$('streamDot').style.boxShadow=`0 0 12px ${color}`;if(mode==='offline'||mode==='stm32'){$('update').textContent=mode==='stm32'?'等待 STM32 新数据':'基座数据已中断';$('echoText').textContent='等待基座 ESP 数据';$('echoText').style.color='var(--muted)';}}
     let telemetryPollAt=0,scanTelemetryAt=0,scanTelemetryOnline=false;
-    // Save the filtered visible cloud, without references to live mesh/state objects.
+    // Store nearby fixed points in the checkpoint's body frame. Old route files
+    // can still reconstruct points from distance and scan angles alone.
     function captureScan(){
-      if(!scanTelemetryOnline||!scanTelemetryAt||Date.now()-scanTelemetryAt>1200)
+      const now=Date.now();
+      if(!scanTelemetryOnline||!scanTelemetryAt||now-scanTelemetryAt>1200)
         throw Error('扫描数据未连接或已过期，请恢复基座与手持连接后再保存路线点。');
-      const savedPoints=points.map(point=>({distance:point.distance,yaw:point.yaw,pitch:point.pitch}));
-      if(!savedPoints.length)throw Error('当前没有可保存的扫描点，请先扫描150 cm内的目标。');
-      return {kind:'3d',points:savedPoints,view:{camera:camera.position.toArray(),target:controls.target.toArray()}};
+      if(!routeReady(now))throw Error('请等待里程计位姿同步后再保存路线点。');
+      const origin=worldPosition(routeEngine);
+      const savedPoints=[...mapPoints.values()]
+        .map(point=>({point,relative:point.pos.clone().sub(origin)}))
+        .filter(({relative})=>Math.hypot(relative.x,relative.z)<=2*UNITS_PER_METER)
+        .slice(-800)
+        .map(({point,relative})=>({distance:point.distance,yaw:point.yaw,pitch:point.pitch,
+          position:relative.applyAxisAngle(yawAxis,-routeEngine.heading).multiplyScalar(1/UNITS_PER_METER).toArray()}));
+      if(!savedPoints.length)throw Error('当前位置附近没有可保存的点，请停车扫描并等待地图更新。');
+      return {kind:'3d',points:savedPoints};
     }
     window.VehicleRoute.setScanCapture(captureScan);
-    if(window.RoverDemo&&window.RoverDemo.enabled){
+    if(simulated){
       window.RoverDemo.attach({
         clear:clearPointCloud,
         point:addPoint,
-        view(){camera.position.set(460,330,600);controls.target.set(0,95,150);controls.update();},
-        frame(frame){
-          const recordingPaused=paused;paused=true;
-          try{scanTelemetryOnline=true;scanTelemetryAt=Date.now();updateGas(frame.gases);setConnectionState('online');update(frame);}
-          finally{paused=recordingPaused;}
+        view(){cameraAtCar([380,310,510],85,140);},
+        frame(frame,route,seek){
+          if(seek)snapPose=true;
+          refreshWorld(route);updateGas(frame.gases);setConnectionState('online');update(frame);
         }
       });
       const liveLink=new URL(location.href);liveLink.searchParams.delete('demo');
@@ -186,7 +465,8 @@ function updateGas(gases) {
     let telemetryTimer=0, telemetryFailures=0;
     function clearLiveTelemetry(mode){
         rover.setWheelSpeed(null,performance.now());
-        scanTelemetryOnline=false;
+        scanTelemetryOnline=false;state.distanceValid=false;
+        pendingScans.length=0;latestScan=null;
         current.visible=beam.visible=false;
         for(const id of ['yaw','pitch','distance','height','raw']) $(id).textContent='--';
         $('sceneReadout').textContent='等待实时数据';
@@ -208,10 +488,18 @@ function updateGas(gases) {
         telemetryFailures=0;
         scanTelemetryOnline=frame.online===true&&frame.link===true&&Number.isFinite(Number(frame.roll))&&Number.isFinite(Number(frame.pitch));
         if(scanTelemetryOnline&&frame.sequence!==lastSequence)scanTelemetryAt=Date.now();
-        if(window.VehicleRoute)window.VehicleRoute.feed(frame.odometry);
+        if(frame.odometry?.session!==encoderSession){
+          encoderSession=frame.odometry?.session;
+          latestScan=null;pendingScans.length=0;
+        }
+        window.VehicleRoute.feed(frame.odometry);
+        refreshWorld();
         if(window.WheelSpeedPanel)window.WheelSpeedPanel.feed(frame.wheelSpeed);
         updateGas(frame.gases);
-        if(frame.online!==true){nextDelay=400;clearLiveTelemetry('stm32');return;}
+        if(frame.online!==true){
+          nextDelay=400;window.VehicleRoute.disconnect();refreshWorld();
+          clearLiveTelemetry('stm32');return;
+        }
         if(frame.vehicle&&frame.vehicle.online===true&&frame.vehicle.mode===5)nextDelay=160;
         const handheldLost=frame.link!==true ||
           (frame.handheldUdpOnline===false&&frame.vehicle&&[0,5].includes(frame.vehicle.mode));
@@ -223,8 +511,8 @@ function updateGas(gases) {
       }catch(error){
         telemetryFailures++;
         nextDelay=Math.min(2500,250 * (2 ** Math.min(telemetryFailures-1,4)));
-        if(window.VehicleRoute)window.VehicleRoute.disconnect();
-        updateGas([]);
+        window.VehicleRoute.disconnect();
+        refreshWorld();updateGas([]);
         clearLiveTelemetry('offline');
       }finally{
         clearTimeout(timeout);
@@ -236,9 +524,11 @@ function updateGas(gases) {
       if(document.hidden){
         clearTimeout(telemetryTimer);
         rover.setWheelSpeed(null,performance.now());
+        pendingScans.length=0;latestScan=null;
+        current.visible=beam.visible=false;
       }else pollTelemetry();
     });
-    $('pause').addEventListener('click',()=>{paused=!paused;$('pause').textContent=paused?'继续记录':'暂停记录';addLog(paused?'点云记录已暂停':'点云记录已继续');});$('clearPoints').addEventListener('click',clearPointCloud);$('connect').addEventListener('click',pollTelemetry);if(!(window.RoverDemo&&window.RoverDemo.enabled))setConnectionState('offline');pollTelemetry();
+    $('pause').addEventListener('click',()=>{paused=!paused;if(paused){pendingScans.length=0;latestScan=null;}$('pause').textContent=paused?'继续记录':'暂停记录';addLog(paused?'点云记录已暂停':'点云记录已继续');});$('clearPoints').addEventListener('click',()=>{clearPointCloud();targets([]);drawProfile([]);addLog('点云已清空');});$('connect').addEventListener('click',pollTelemetry);if(!(window.RoverDemo&&window.RoverDemo.enabled))setConnectionState('offline');pollTelemetry();
   </script>
 </body>
 </html>
