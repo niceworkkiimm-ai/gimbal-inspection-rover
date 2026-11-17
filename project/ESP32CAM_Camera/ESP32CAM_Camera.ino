@@ -1,5 +1,6 @@
 /*
- * ESP32-CAM（ESP-32S）独立车载图传 V1.4 / 2026-11-10，配套2D/3D网页 V8.15。
+ * ESP32-CAM（ESP-32S）独立车载图传 V1.5 / 2026-11-17。
+ * V1.5：启动后将 GPIO4 置高，板载补光灯保持开启。
  * 完整接线/参数见 CameraConfig.h 和项目根目录 V8.4_ESP32-CAM烧录与接线.md。
  * 只供电并连接 GimbalCtrl；不连接STM32串口，不转发视频经过基座HTTP。
  * 共用ESP8266热点无线带宽，不能保证零延迟；本固件不含任何车辆控制接口。
@@ -175,7 +176,7 @@ void setup() {
   Serial.printf("Chip: %s; Flash: %u bytes; PSRAM: %u bytes\n",
                 ESP.getChipModel(), (unsigned)ESP.getFlashChipSize(), (unsigned)ESP.getPsramSize());
   pinMode(CAM_FLASH_LED, OUTPUT);
-  digitalWrite(CAM_FLASH_LED, LOW); // 不使用闪光灯/TF卡，避免额外供电负担。
+  digitalWrite(CAM_FLASH_LED, HIGH); // 正常启动后保持板载补光灯开启。
   snprintf(bootId, sizeof(bootId), "%08lx", (unsigned long)esp_random());
   if (!psramFound()) {
     cameraError = ESP_ERR_NO_MEM;

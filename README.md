@@ -13,11 +13,15 @@
 | STM32 主控 | V8.16 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
 | 基座 ESP-01S | V4.11 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
-| AI Thinker ESP32-CAM | V1.4 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
+| AI Thinker ESP32-CAM | V1.5 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
 | 二维网页 | V8.18 | `project/gimbal-radar-standalone.html` |
 | 三维网页 | V8.21 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
+
+近期变更和下一步见[开发记录](docs/development-log.md)。实车一键掉头返航处于[方案阶段](docs/return-to-start.md)。
+
+摄像头 V1.5 发布原工程的上电补光设置，启动后将 GPIO4 置高。启用这项补光只需烧录普通 AI Thinker ESP32-CAM 固件。
 
 V8.21 回放路线采用 A* 搜索和车身安全包络检查，避开固定场景中的墙体、台阶、碎石和柱体。黄色虚线显示规划路径，蓝线显示已走路线。页面使用巡检回放名称，JSON 保留数据来源字段。此规划运行于网页回放。
 

@@ -1,8 +1,9 @@
 #include "secrets.h"
 #pragma once
 /*
- * 摄像头固件 V1.4 / 2026-11-10
- * 本次：相对V1.2画面旋转180度（同时切换上下翻转与左右镜像）。
+ * 摄像头固件 V1.5 / 2026-11-17
+ * V1.5：GPIO4 板载补光灯在固件启动后保持开启；继承 V1.4 图传设置。
+ * V1.3 相对 V1.2 画面旋转 180 度（同时切换上下翻转与左右镜像）。
  * 上限10帧/秒、分辨率、完整接线及控制链路不变。
  * 实物：ESP-32S / ESP32-CAM + ESP32-CAM-MB(CH340C)，不是 ESP32-S3。
  * 依据：实物照片、烧录器识别为 ESP32、Arduino-ESP32 3.3.11 官方
@@ -29,7 +30,7 @@
  * Flash Mode=DIO；Flash Frequency=40MHz；Partition Scheme=Huge APP。
  * 此板定义默认4MB Flash并启用PSRAM，无独立PSRAM/Flash Size菜单；
  * 不用S3的16MB/OPI PSRAM/USB CDC选项。容量需实物日志确认，不能从照片保证。
- * 本版不使用TF卡，GPIO4闪光灯保持关闭。画面方向装车后实测。
+ * 本版 GPIO4 用于补光，固件未初始化 TF 卡。装车后实测补光与图传稳定性。
  * 只做摄像头服务，不发送车辆控制命令。编译通过不代表实物出图已验证。
  */
 #if !defined(CONFIG_IDF_TARGET_ESP32)
@@ -39,7 +40,7 @@
 #error "This firmware requires PSRAM. Select AI Thinker ESP32-CAM."
 #endif
 
-static const char CAMERA_VERSION[] = "1.4";
+static const char CAMERA_VERSION[] = "1.5";
 // 网页协议保持1.0，兼容原查看器；V8.5两页支持10帧。此处不是固件版本。
 static const char CAMERA_API_VERSION[] = "1.0";
 static const char CAMERA_WIFI_SSID[] = "GimbalCtrl";

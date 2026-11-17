@@ -1,6 +1,6 @@
 # 巡检小车项目与开发对话交接
 
-更新日期：2026-11-05。本文汇总项目结构、开发对话、验证记录和待排查问题，供接手者继续修改已有工程。先读本文及 [README](../README.md)，再用源码和设备核对具体问题。交接时已确认原工程 226 个可发布文件与仓库 `project/` 一致。
+更新日期：2026-11-17。本文汇总项目结构、开发对话、验证记录和待排查问题。先读本文及 [README](../README.md)，再核对源码与设备。最近讨论及下一步见[开发记录](development-log.md)与[原路返航方案](return-to-start.md)。
 
 ## 1. 先用一分钟理解项目
 
@@ -18,7 +18,7 @@ ESP32-CAM加入同一热点，网页直接向摄像头取图，不经过STM32串
 
 ## 2. 代码位置、入口和版本
 
-用户明确指定：后续业务代码在桌面“新版嵌入式”内修改，再同步GitHub。
+业务代码在 `.local/config.json` 指向的本机原工程修改，再同步 GitHub。桌面“新版嵌入式”是历史记录的位置。
 
 源码、仓库和配套材料的完整本机路径见 [第 9 节](#9-本机位置与发布范围)。
 
@@ -31,7 +31,7 @@ ESP32-CAM加入同一热点，网页直接向摄像头取图，不经过STM32串
 | STM32F407ZG | V8.16 | Gimbal_STLink.uvprojx；User/main.c |
 | 基座ESP-01S | V4.11 | ESP01S_Base_UDP/ESP01S_Base_UDP.ino |
 | 手持NodeMCU | V1.6 | NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino |
-| 普通AI Thinker ESP32-CAM | V1.4 | ESP32CAM_Camera/ESP32CAM_Camera.ino |
+| 普通AI Thinker ESP32-CAM | V1.5 | ESP32CAM_Camera/ESP32CAM_Camera.ino |
 | 二维网页 | V8.18 | gimbal-radar-standalone.html |
 | 三维网页 | V8.21 | gimbal-3d-scan.html |
 | 巡检回放入口 | V8.21 | 巡检回放.html |
@@ -59,17 +59,17 @@ ESP01S_Handheld_MPU_UDP、ESP32S3_Camera等是历史/辅助目录，不是当前
 
 曾做过上传保存路线、轮速闭环、自动重复行驶及多次方向修正。后来用户要求删掉自动行驶，V8.9已经移除其状态机、控制协议和网页入口；基座旧/api/route返回410。当前保留实时路线、保存/打开JSON、路线补传、位置扫描快照、手动驾驶与云台自动扫描。
 
-“云台自动扫描”和“小车自动驾驶”是两回事。旧V7/V8.0等文档里的自动复走算法和参数不能当作当前启用功能，不要擅自恢复。
+“云台自动扫描”和“小车自动驾驶”是两回事。旧 V7/V8.0 自动复走已移除。新的[原路返航方案](return-to-start.md)使用车端记录的本次任务，目前待实现。
 
-### 3.3 摄像头最近又改过方向
+### 3.3 摄像头画面方向与补光
 
 早期V1.2配置为CAMERA_VFLIP=1、CAMERA_HMIRROR=0。用户后来要求把画面反过来，V1.3 起采用 VFLIP=0、HMIRROR=1，相对于V1.2画面旋转180°。调整在传感器端完成，不要再在网页重复翻转。
 
-仍为 320×240，默认 5 帧，支持 10/5/3 帧档。V1.4 可降 JPEG 体积、限帧及断流重试。改摄像头方向只需重烧摄像头，不要求重烧整车。没有实物验证记录时，不要说已经确认方向正确。
+仍为 320×240，默认 5 帧，支持 10/5/3 帧档。V1.4 可降 JPEG 体积、限帧及断流重试。V1.5 发布原工程已有的 GPIO4 上电补光设置。补光只需更新普通 ESP32-CAM，正常运行时松开 GPIO0。装车后验证补光、画面方向和持续图传。
 
 ## 4. 手持遥控器与输入逻辑
 
-实物使用NodeMCU ESP8266、MPU6050、ADS1115、双轴摇杆、SSD1306 OLED和电池供电板。
+当前仓库手持代码目标为 NodeMCU ESP8266，外设为 MPU6050、ADS1115、双轴摇杆、SSD1306 OLED 和电池供电板。用户近期将手持实物称为“ESP32-12”，实际芯片型号须在手持更新前核对。下文引脚对应仓库现有 ESP8266 版本。
 
 - D1/GPIO5是SCL，D2/GPIO4是SDA；MPU、OLED、ADS共用I2C。
 - 摇杆X/Y接ADS1115 A0/A1，不是NodeMCU板载A0。ADS ADDR接地；摇杆SW接D5/GPIO14，按下接地。
@@ -214,4 +214,4 @@ V8.14 已提供本地模拟：
 
 ## 可直接发给新 AI 的开场白
 
-请先阅读 https://github.com/niceworkkiimm-ai/gimbal-inspection-rover 的 README 和 docs/AI_HANDOFF.md，再对照 project/ 及本机实际源码。这个项目是STM32F407ZG巡检小车，包含NodeMCU体感/摇杆手持、ESP-01S基座、超声波云台、气体检测、ESP32-CAM及2D/3D网页。当前参考版本为主控V8.16、基座V4.11、手持V1.6、摄像头V1.4、2D网页V8.18、3D网页V8.21。实车故障可用小车诊断记录工具留痕。尤其注意：基座使用PA2/PA3，气体使用PC10/PC11；自动复走已删除，保存路线和位置扫描快照必须保留；离线模拟数据不是实测；后轮故障和换板结果仍须向我核实。先说明你理解的系统组成和发现的版本差异，再按我后续需求工作。不要重写整个项目，不要将旧聊天中的接线、故障和功能当作当前事实。
+请先阅读 https://github.com/niceworkkiimm-ai/gimbal-inspection-rover 的 README、docs/AI_HANDOFF.md 和 docs/development-log.md，再对照 project/ 及本机实际源码。这个项目是STM32F407ZG巡检小车，包含体感/摇杆手持、ESP-01S基座、超声波云台、气体检测、ESP32-CAM及2D/3D网页。当前参考版本为主控V8.16、基座V4.11、手持V1.6、摄像头V1.5、2D网页V8.18、3D网页V8.21。实车故障可用小车诊断记录工具留痕。尤其注意：基座使用PA2/PA3，气体使用PC10/PC11；实车原路返航待实现，方案见 docs/return-to-start.md；保存路线和位置扫描快照必须保留；后轮故障、换板结果和手持芯片型号仍须核对。先说明你理解的系统组成和发现的版本差异，再按我后续需求工作。
