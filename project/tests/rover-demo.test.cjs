@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict');
-const {makeScenario,makeScan}=require('../rover-demo.js');
+const {makeScenario,makeScan,clearance,segmentClear,CLEARANCE_M}=require('../rover-demo.js');
 const {routeRecord,parseRouteFile}=require('../vehicle-route.js');
 const s=makeScenario(),origin=1792890000000;
 let passed=0;
@@ -40,5 +40,21 @@ check('seeking backwards removes future checkpoints and exported snapshots own t
   assert(early.points.length<full.points.length);
   const n=s.scans[0].points[0].distance;full.scans[0].scan.points[0].distance=999;
   assert.equal(s.scans[0].points[0].distance,n);assert.equal(early.scans[0].scan.points[0].distance,n);
+});
+check('every route segment and vehicle footprint clears the same obstacles used for ranging',()=>{
+  for(const sample of s.samples)assert(clearance(sample,s.objects)>=CLEARANCE_M-1e-8);
+  for(const path of s.plans)for(let i=1;i<path.length;i++)
+    assert(segmentClear(path[i-1],path[i],s.objects));
+  for(const sample of s.samples.filter(p=>p.phase==='drive')){
+    const distance=s.readingAt(sample).distance;
+    assert(!Number.isFinite(distance)||distance>=20);
+  }
+  assert(s.plans.slice(1).some(path=>!segmentClear(path[0],path.at(-1),s.objects)));
+  for(const phase of s.phases.filter(p=>p.type==='turn')){
+    const sample=s.sampleAt((phase.start+phase.end)/2);
+    assert.equal(sample.speed,0);
+    assert(sample.rpm[0]*sample.rpm[1]<0);
+    assert(Math.hypot(phase.to.x-phase.from.x,phase.to.y-phase.from.y)<1e-9);
+  }
 });
 console.log(passed+' passed, 0 failed');

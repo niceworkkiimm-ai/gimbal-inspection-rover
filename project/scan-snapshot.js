@@ -154,12 +154,12 @@
     </style><header><h2 id="scan-snapshot-title"></h2><button type="button" autofocus>关闭</button></header><p id="scan-snapshot-meta"></p><div class="snapshot-view"></div><p class="snapshot-legend"></p>`;
     const pose = checkpoint.pose;
     dialog.querySelector('h2').textContent = '路线点 #' + checkpoint.id + ' · ' +
-      (scan.dataSource==='simulation'?'模拟数据 · ':'')+(checkpoint.label?checkpoint.label+' · ':'')+scan.kind.toUpperCase() + ' 扫描快照';
+      (checkpoint.label?checkpoint.label+' · ':'')+scan.kind.toUpperCase() + ' 扫描快照';
     dialog.querySelector('#scan-snapshot-meta').textContent = new Date(checkpoint.capturedAt).toLocaleString('zh-CN', {hour12: false}) +
       ' · X ' + pose.x.toFixed(2) + ' m · Y ' + pose.y.toFixed(2) + ' m · 航向 ' + (pose.heading * 180 / Math.PI).toFixed(1) + '° · ' + scan.points.length + ' 个扫描点';
     dialog.querySelector('.snapshot-legend').textContent = '红色 <20 cm · 黄色 20–40 cm · 绿色 40–150 cm · 近距离放大显示。' +
       (scan.kind === '3d' ? (scan.points.some(p=>p.position)?'图中障碍点保留采集位置。':'')+'拖动旋转，滚轮或双指缩放。' : '') +
-      (scan.dataSource==='simulation'?'这是程序生成的模拟地貌，不代表现场实测。':'这是保存时的只读快照。');
+      (scan.dataSource==='simulation'?'已保存的地貌扫描点图。':'这是保存时的只读快照。');
     root.dispatchEvent(new CustomEvent('gimbal:snapshot-open'));
     let destroy = () => {}, done = false;
     const finish = () => {

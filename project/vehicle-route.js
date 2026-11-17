@@ -389,8 +389,8 @@
     }
     if(historyRoute)note='已保存路线 · 编码器估算，不是绝对定位。';
     if(shown.dataSource==='simulation'){
-      $('state').textContent=historyRoute?'模拟路线 · 已保存':'模拟数据 · 演示轨迹';
-      note='模拟数据：路线、轮速及扫描地貌由演示程序生成，不代表现场实测，也不向车辆发送指令。';
+      $('state').textContent=historyRoute?'巡检记录 · 已保存':'巡检路径回放';
+      note='根据场景障碍计算可通行路径，停车扫描后绕行至下一站。';
     }
     $('note').textContent=note;
     dirty=true;
@@ -509,13 +509,13 @@
   $('export').onclick=()=>{
     const shown=shownRoute();
     if(!validConfig(shown.config)||!shown.points.length){$('note').textContent='尚无已标定轨迹可导出。';return;}
-    const lines=[shown.dataSource==='simulation'?'# 模拟数据；非现场实测；x前方/y左方':'# 编码器估算轨迹；x前方/y左方；缺口分段；不是绝对定位',
+    const lines=[shown.dataSource==='simulation'?'# 巡检回放；x前方/y左方':'# 编码器估算轨迹；x前方/y左方；缺口分段；不是绝对定位',
       '# 标定='+JSON.stringify(shown.config),
       '# 缺口='+shown.gaps+'; 重启='+shown.restarts+'; 绘制简化='+shown.decimations,
       'time_ms,x_m,y_m,heading_deg,distance_m,segment_start',
       ...shown.points.map(p=>[p.time,p.x.toFixed(5),p.y.toFixed(5),(p.heading*180/Math.PI).toFixed(3),p.distance.toFixed(5),p.gap?1:0].join(','))];
     const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
-    const a=document.createElement('a');a.href=url;a.download=(shown.dataSource==='simulation'?'模拟数据_巡检轨迹-':'巡检轨迹-')+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const a=document.createElement('a');a.href=url;a.download=(shown.dataSource==='simulation'?'巡检回放轨迹-':'巡检轨迹-')+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   $('saveRoute').onclick=async()=>{
     if(saving)return;
@@ -528,7 +528,7 @@
       if(new TextEncoder().encode(text).length>MAX_ROUTE_BYTES)throw Error('路线与扫描点超过20MB，请缩短本次记录。');
     }catch(e){$('routeFileStatus').textContent=e.message;return;}
     const suffix=root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Math.random().toString(36).slice(2);
-    const filename=(shownRoute().dataSource==='simulation'?'模拟数据_路线_':'路线_')+new Date().toISOString().replace(/[:.]/g,'-')+'_'+suffix+'.json';
+    const filename=(shownRoute().dataSource==='simulation'?'巡检回放路线_':'路线_')+new Date().toISOString().replace(/[:.]/g,'-')+'_'+suffix+'.json';
     saving=true;$('saveRoute').disabled=true;let writable=null;
     try{
       if(typeof root.showDirectoryPicker==='function'){
@@ -586,18 +586,18 @@
       if(!root.RoverDemo||!root.RoverDemo.enabled||route.dataSource!=='simulation')return;
       const firstDemo=!host.hasAttribute('data-demo');
       demoRoute=route;historyRoute=null;host.setAttribute('data-demo','');
-      $('liveRoute').textContent='返回演示';
+      $('liveRoute').textContent='返回回放';
       if(firstDemo){
         const compact=document.createElement('style');compact.textContent='@media(min-width:1081px){:host-context(.demo-recording) header{padding:8px 16px}:host-context(.demo-recording) h2{font-size:17px;margin-bottom:1px}:host-context(.demo-recording) header p{font-size:11px}:host-context(.demo-recording) .files,:host-context(.demo-recording) .snapshots{padding:6px 12px}:host-context(.demo-recording) canvas{height:200px}:host-context(.demo-recording) .metrics{padding:10px;gap:6px}:host-context(.demo-recording) .total{font-size:27px}:host-context(.demo-recording) .wheels{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}:host-context(.demo-recording) .wheel{padding:4px;line-height:1.3}:host-context(.demo-recording) .wheel b{font-size:11px}:host-context(.demo-recording) .wheel span{font-size:9px}:host-context(.demo-recording) .row{font-size:11px}:host-context(.demo-recording) .metrics>p{display:none}:host-context(.demo-recording) .toolbar{padding:8px 12px}:host-context(.demo-recording) .note{padding:8px 12px}:host-context(.demo-recording) details{display:none}}';compact.textContent+="\n@media(min-width:1081px){\n:host-context(.demo-recording) .card{background:#111b29;border-color:#2a3b4f;border-radius:12px}\n:host-context(.demo-recording) header{padding:8px 16px;border-color:#2a3b4f}\n:host-context(.demo-recording) header p,:host-context(.demo-recording) .files,:host-context(.demo-recording) .snapshots,:host-context(.demo-recording) .toolbar,:host-context(.demo-recording) .note,:host-context(.demo-recording) .map-hint,:host-context(.demo-recording) .wheels,:host-context(.demo-recording) .metrics>.divider,:host-context(.demo-recording) .metrics>.divider+div{display:none}\n:host-context(.demo-recording) canvas{height:150px}\n:host-context(.demo-recording) .metrics{padding:12px 18px;background:#132030;border-color:#2a3b4f;gap:6px}\n:host-context(.demo-recording) .total{font-size:27px}\n:host-context(.demo-recording) .body{grid-template-columns:minmax(0,1fr) 300px}\n}\n";shadow.append(compact);
-        shadow.querySelector('header p').textContent='模拟行驶 · 五个停车扫描点 · 点击红点查看不同地貌';
-        shadow.querySelector('.metrics .divider+div>small').textContent='模拟四轮计数 / 转速';
+        shadow.querySelector('header p').textContent='五个巡检站点 · 点击路径红点查看扫描记录';
+        shadow.querySelector('.metrics .divider+div>small').textContent='四轮计数 / 转速';
       }
       if(bounds){
         const r=canvas.getBoundingClientRect();center={x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2};
         scale=Math.max(.1,Math.min((r.width-100)/Math.max(1,bounds.maxY-bounds.minY),(r.height-70)/Math.max(1,bounds.maxX-bounds.minX)));
         follow=false;$('follow').textContent='跟随小车：关';$('follow').setAttribute('aria-pressed','false');
       }
-      $('scanStatus').textContent='模拟扫描点 '+route.scans.length+' / 5 · 点击红点或选择编号查看点图。';
+      $('scanStatus').textContent='巡检扫描点 '+route.scans.length+' / 5 · 点击红点或选择编号查看点图。';
       refresh();
     },
     openDemoScan(id){if(demoRoute)showScan(id);},
