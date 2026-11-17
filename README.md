@@ -15,9 +15,11 @@
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.4 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
 | 二维网页 | V8.18 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.19 | `project/gimbal-3d-scan.html` |
+| 三维网页 | V8.20 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
+
+V8.20 调整为深蓝灰界面，扩大录屏布局中的三维地图，保留下方路线概览。离线演示沿用五站模拟数据、新版 CAD 车模和固定地图点云。
 
 V8.19 三维巡检地图使用四轮编码器估算的位置与朝向移动车模，按超声波遥测对应的位姿将回波放到地图上。小车驶离时，已记录点位留在原处。点「跟随小车」可跟车观察，点「查看全程」可总览轨迹和累计点云。实车使用前在页面下方的「路线标定」确认参数，轮胎打滑会造成地图偏差。此网页更新沿用现有固件。
 

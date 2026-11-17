@@ -217,7 +217,7 @@
   demo.pause=function(){demo.playing=false;paint(true);};
   demo.initialize=function(){
     if(initialized)return;initialized=true;document.body.classList.add('demo-mode','demo-recording');
-    document.title='巡检小车 · 模拟演示 V8.19';
+    document.title='巡检小车 · 模拟演示 V8.20';
     const section=document.createElement('section');section.id='rover-demo-controls';
     section.innerHTML=`<style>
       #rover-demo-controls{margin:16px 0 18px;padding:13px 16px;background:#17251e;border:1px solid #41624f;border-radius:7px;color:#edf4ef}
@@ -235,8 +235,26 @@
       #rover-demo-controls .station.complete b{color:#ff7777}#rover-demo-controls .station.current{border-color:#4bda9a;background:#1b3929}
       .demo-mode .top-actions{flex-wrap:wrap}.demo-mode #connect{display:none}.demo-mode #pause{display:none}
       .demo-mode .demo-watermark{position:fixed;bottom:12px;right:16px;color:#f0c77f;background:#142119ed;border:1px solid #6b6343;padding:5px 11px;border-radius:4px;font-size:12px;z-index:30;pointer-events:none}
-      @media(min-width:1081px){.demo-recording .app{max-width:1740px;padding:12px 22px}.demo-recording .top{padding-bottom:10px}.demo-recording .layout{grid-template-columns:200px minmax(0,1fr) 220px;margin-top:12px;gap:14px}.demo-recording .scene-panel{height:310px;min-height:310px;padding:12px}.demo-recording .side{padding:11px}.demo-recording .side .divider{margin:10px 0}.demo-recording .right>.eyebrow:first-child,.demo-recording #targets,.demo-recording .right>.divider,.demo-recording .right .raw{display:none}.demo-recording .gas-list{margin-top:5px;gap:4px}.demo-recording .gas-card{padding:5px 8px}.demo-recording .gas-card strong{font-size:12px}.demo-recording .gas-card small{margin-top:1px;font-size:10px}.demo-recording .cache-head{margin-top:10px}.demo-recording .legend{font-size:10px;gap:10px}.demo-recording .bottom,.demo-recording #wheel-speed-panel{display:none}.demo-recording .distance{font-size:41px}.demo-recording .metric-list{gap:9px}.demo-recording #rover-demo-controls{margin:10px 0;padding:10px 14px}.demo-recording #vehicle-route-panel{margin-top:14px!important}.demo-recording .footer{margin-top:8px}}
+      @media(min-width:1081px){.demo-recording .app{max-width:1740px;padding:12px 22px}.demo-recording .top{padding-bottom:10px}.demo-recording .layout{grid-template-columns:200px minmax(0,1fr) 220px;margin-top:12px;gap:14px}.demo-recording .scene-panel{height:310px;min-height:310px;padding:12px}.demo-recording .side{padding:11px}.demo-recording .side .divider{margin:10px 0}.demo-recording .right>.eyebrow:first-child,.demo-recording #targets,.demo-recording .right>.divider,.demo-recording .right .raw{display:none}.demo-recording .gas-list{margin-top:5px;gap:4px}.demo-recording .gas-card{padding:5px 8px}.demo-recording .gas-card strong{font-size:12px}.demo-recording .gas-card small{margin-top:1px;font-size:10px}.demo-recording .cache-head{margin-top:10px}.demo-recording .legend{font-size:10px;gap:10px}.demo-recording .bottom,.demo-recording #wheel-speed-panel{display:none!important}.demo-recording .distance{font-size:41px}.demo-recording .metric-list{gap:9px}.demo-recording #rover-demo-controls{margin:10px 0;padding:10px 14px}.demo-recording #vehicle-route-panel{margin-top:14px!important}.demo-recording .footer{margin-top:8px}}
       @media(max-width:680px){#rover-demo-controls{padding:12px}.demo-mode .top-actions{display:flex}#rover-demo-controls .stations{grid-template-columns:repeat(2,minmax(0,1fr))}#rover-demo-controls .demo-line{gap:7px}#demo-phase{flex-basis:100%;order:2}}
+
+#rover-demo-controls{background:#111d2b;border-color:#2a3b4f;border-radius:12px}
+#rover-demo-controls button,#rover-demo-controls select{background:#1b2b3e;border-color:#34495f;border-radius:6px}
+#rover-demo-controls .station{background:#142232;border-color:#2a3b4f}
+#rover-demo-controls .station.current{background:#153b3a;border-color:#67dfbe}
+#rover-demo-controls .station.complete b{color:#67dfbe}
+#rover-demo-controls .demo-label{color:#edf3fa}#rover-demo-controls #demo-phase{color:#97c8e4}
+.demo-mode .demo-watermark{background:#13202eeb;border-color:#53616c;border-radius:6px}
+@media(min-width:1081px){
+.demo-recording .app{max-width:1800px;padding:16px 24px}
+.demo-recording .layout{grid-template-columns:190px minmax(0,1fr) 225px;gap:16px}
+.demo-recording .scene-panel{height:490px;min-height:490px;padding:16px}
+.demo-recording .side{padding:18px}.demo-recording .side .divider{margin:24px 0}
+.demo-recording .metric-list{gap:17px}.demo-recording .gas-list{gap:10px;margin-top:14px}
+.demo-recording .gas-card{padding:11px 10px}.demo-recording .gas-card strong{font-size:13px}
+.demo-recording .gas-card small{margin-top:5px}.demo-recording .cache-head{margin-top:24px}
+.demo-recording .distance{margin-top:16px;font-size:46px}.demo-recording .legend{gap:14px}
+}
     </style><div class="demo-line"><strong class="demo-label">模拟数据 · 离线演示</strong><span id="demo-phase">准备出发</span><button id="demo-play">开始演示</button><button id="demo-restart">从头开始</button><label style="font-size:12px;color:#a4bcad">速度 <select id="demo-rate" aria-label="演示播放速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select></label><button id="demo-layout" aria-pressed="true">录屏布局：开</button><button id="demo-export">下载完整模拟路线</button></div><div class="timeline"><input id="demo-progress" type="range" min="0" max="${scenario.duration}" step="0.08" value="0" aria-label="模拟演示进度"><span id="demo-clock"></span></div><div class="stations">${STATIONS.map((s,i)=>`<button class="station" data-station="${i}"><b>${i+1}</b><span>${s.name}<small>待扫描</small></span></button>`).join('')}</div>`;
     document.querySelector('.top').after(section);ui=section;
     const watermark=document.createElement('div');watermark.className='demo-watermark';watermark.textContent='模拟演示 · 非实测数据';document.body.append(watermark);
@@ -253,7 +271,7 @@
       const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)],{type:'application/json'}));
       const a=document.createElement('a');a.href=url;a.download='模拟数据_完整巡检路线_五个扫描点.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
-    const footer=document.querySelector('.footer>span');footer.textContent='V8.19 · 模拟路线、测距、气体与轮速，仅用于功能演示';
+    const footer=document.querySelector('.footer>span');footer.textContent='V8.20 · 模拟路线、测距、气体与轮速，仅用于功能演示';
     const sceneLabel=document.querySelector('.scene-head strong');sceneLabel.textContent='三维巡检地图 · 模拟';
     root.addEventListener('gimbal:snapshot-open',()=>{if(demo.playing)demo.pause();});
     if(bridge.view)bridge.view();

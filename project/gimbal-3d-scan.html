@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>三维巡检地图 · V8.19</title>
+  <title>三维巡检地图 · V8.20</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -31,18 +31,32 @@
 .gas-card[data-level="offline"]{opacity:.75}
 .gas-card strong,.gas-card small{display:block}
 .gas-card small{margin-top:4px;white-space:normal;overflow-wrap:anywhere}
+
+:root{--bg:#0b1019;--panel:#111b29;--panel-2:#182638;--line:#2a3b4f;--text:#edf3fa;--muted:#9aaec2;--green:#67dfbe}
+body{background:radial-gradient(ellipse at 45% 0,#18293d 0,#0b1019 65%)}
+.app{max-width:1800px}.mark{border-radius:12px;box-shadow:none}
+h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
+.panel{border-radius:12px;background:linear-gradient(145deg,#142030,#101923)}
+.btn{border-radius:7px}.btn:hover{background:#26374b}.btn-primary:hover{background:#8eead0}
+.distance #distance{font-size:inherit;font-weight:600;color:var(--text)}
+.metric-list{margin-top:14px}.metric strong{font-size:15px}
+.scene-panel{padding:18px}.scene-head strong{font-size:17px;letter-spacing:.5px}
+#scene{border-color:#2a3b4f;border-radius:8px;background:#0b1320}
+.corner{padding:5px 8px;border-radius:4px;background:#0b1320cc}
+.gas-card,.target{border-radius:5px}.raw{background:#0d1622}.bar{background:#0b1320}
+@media(max-width:680px){.scene-head{align-items:flex-start;flex-direction:column}.scene-tools{justify-content:flex-start}.scene-panel{min-height:520px;padding:12px}h1{font-size:19px}}
 </style>
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.19</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.20</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">模拟演示</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">风险判断</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
       <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
       <aside class="panel side right"><div class="eyebrow">车前已扫描点</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 6000</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
     <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>车身前向截面</strong><span>横轴：0–150 cm · 相对当前车身</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
-    <footer class="footer"><span>V8.19 · 扫描量程显示 150 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
+    <footer class="footer"><span>V8.20 · 扫描量程显示 150 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
   </main>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
@@ -52,8 +66,8 @@
   <script src="rover-model-data.js?v=8.18"></script>
   <script src="gimbal-model.js?v=8.18"></script>
   <script src="scan-snapshot.js?v=8.19"></script>
-  <script src="rover-demo.js?v=8.19"></script>
-  <script src="vehicle-route.js?v=8.19"></script>
+  <script src="rover-demo.js?v=8.20"></script>
+  <script src="vehicle-route.js?v=8.20"></script>
   <script src="route-log.js?v=8.19"></script>
   <script src="wheel-speed-panel.js?v=8.14"></script>
   <script src="camera-panel.js?v=8.17"></script>
@@ -79,7 +93,7 @@
     let headingTarget=0, snapPose=true;
 
     const renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
-    renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0c1310,1);
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x0b1320,1);
     container.appendChild(renderer.domElement);
     const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(48,1,1,16000);
     camera.position.set(300,220,380);
@@ -88,7 +102,7 @@
     controls.minDistance=120;controls.maxDistance=12000;controls.maxPolarAngle=Math.PI*.49;
     scene.add(new THREE.HemisphereLight(0xcfffe7,0x07110b,2.4));
     const key=new THREE.DirectionalLight(0xd8fff0,1.5);key.position.set(90,170,120);scene.add(key);
-    const grid=new THREE.GridHelper(8000,40,0x3b7356,0x263e32);
+    const grid=new THREE.GridHelper(8000,40,0x39546a,0x23374a);
     grid.position.y=-1;
     const startMark=new THREE.Mesh(new THREE.RingGeometry(13,18,32),
       new THREE.MeshBasicMaterial({color:0x78bfff,side:THREE.DoubleSide}));
@@ -103,7 +117,7 @@
     scanGeometry.setAttribute('color',scanColorAttr);
     scanGeometry.setDrawRange(0,0);
     const cloud=new THREE.Points(scanGeometry,new THREE.PointsMaterial({
-      vertexColors:true,size:7.5,sizeAttenuation:true
+      vertexColors:true,size:2.5,sizeAttenuation:false,transparent:true,opacity:.85
     }));
     cloud.name='world-scan-points';cloud.frustumCulled=false;scene.add(cloud);
     const trail=new THREE.LineSegments(new THREE.BufferGeometry(),
@@ -452,7 +466,7 @@ function updateGas(gases) {
       window.RoverDemo.attach({
         clear:clearPointCloud,
         point:addPoint,
-        view(){cameraAtCar([380,310,510],85,140);},
+        view(){cameraAtCar([290,300,410],55,30);},
         frame(frame,route,seek){
           if(seek)snapPose=true;
           refreshWorld(route);updateGas(frame.gases);setConnectionState('online');update(frame);

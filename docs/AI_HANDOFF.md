@@ -33,8 +33,8 @@ ESP32-CAM加入同一热点，网页直接向摄像头取图，不经过STM32串
 | 手持NodeMCU | V1.6 | NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino |
 | 普通AI Thinker ESP32-CAM | V1.4 | ESP32CAM_Camera/ESP32CAM_Camera.ino |
 | 二维网页 | V8.18 | gimbal-radar-standalone.html |
-| 三维网页 | V8.19 | gimbal-3d-scan.html |
-| 离线模拟入口 | V8.19 | 巡检模拟演示.html |
+| 三维网页 | V8.20 | gimbal-3d-scan.html |
+| 离线模拟入口 | V8.20 | 巡检模拟演示.html |
 
 ESP01S_Handheld_MPU_UDP、ESP32S3_Camera等是历史/辅助目录，不是当前整机应烧录的组合。特别注意摄像头实物是普通ESP32-CAM，不是ESP32-S3。
 
@@ -184,12 +184,12 @@ V8.14 已提供本地模拟：
 
 | 用途 | 本机位置 |
 | --- | --- |
-| 原工程，修改和烧录 | `%USERPROFILE%\Desktop\新版嵌入式\嵌入式车版\嵌入式代码最终版\v5.0 (2)\2.0\超声波二维云台体感控制` |
+| 原工程，修改和烧录 | `%USERPROFILE%\Desktop\毕升杯11.14\嵌入式车版\嵌入式代码最终版\v5.0 (2)\2.0\超声波二维云台体感控制` |
 | D 盘仓库和同步脚本 | `D:\嵌入式Git仓库\gimbal-inspection-rover` |
 | 本机同步配置 | D 盘仓库内 `.local/config.json`，以 `source` 为准 |
 | 同步差异备份 | `D:\嵌入式Git备份\gimbal-inspection-rover` |
 | 固件构建缓存 | `D:\EmbeddedBuildCache\gimbal-inspection-rover` |
-| 离线演示包 | `%USERPROFILE%\Desktop\巡检小车模拟演示_V8.14` |
+| 最新离线演示包及录屏 | `D:\RoverDemos\V8.20`，深蓝灰界面、五站路线和新版车模 |
 | 仿真成片、字幕、Blender 工程 | `%USERPROFILE%\Desktop\巡检小车_矿井演示成片`，内有配音版、环境声版和 `.blend` |
 | 最新参赛报告 | `%USERPROFILE%\Desktop\毕昇杯作品论文_多功能巡检与搜救辅助_V6_含目录8页.docx` |
 | 配音稿与流程图 | `%USERPROFILE%\Desktop\巡检小车_视频配音文案_20261029.txt`、`%USERPROFILE%\Desktop\巡检小车_整体思路流程图.png` |
@@ -214,4 +214,4 @@ V8.14 已提供本地模拟：
 
 ## 可直接发给新 AI 的开场白
 
-请先阅读 https://github.com/niceworkkiimm-ai/gimbal-inspection-rover 的 README 和 docs/AI_HANDOFF.md，再对照 project/ 及本机实际源码。这个项目是STM32F407ZG巡检小车，包含NodeMCU体感/摇杆手持、ESP-01S基座、超声波云台、气体检测、ESP32-CAM及2D/3D网页。当前参考版本为主控V8.16、基座V4.11、手持V1.6、摄像头V1.4、2D网页V8.18、3D网页V8.19。实车故障可用小车诊断记录工具留痕。尤其注意：基座使用PA2/PA3，气体使用PC10/PC11；自动复走已删除，保存路线和位置扫描快照必须保留；离线模拟数据不是实测；后轮故障和换板结果仍须向我核实。先说明你理解的系统组成和发现的版本差异，再按我后续需求工作。不要重写整个项目，不要将旧聊天中的接线、故障和功能当作当前事实。
+请先阅读 https://github.com/niceworkkiimm-ai/gimbal-inspection-rover 的 README 和 docs/AI_HANDOFF.md，再对照 project/ 及本机实际源码。这个项目是STM32F407ZG巡检小车，包含NodeMCU体感/摇杆手持、ESP-01S基座、超声波云台、气体检测、ESP32-CAM及2D/3D网页。当前参考版本为主控V8.16、基座V4.11、手持V1.6、摄像头V1.4、2D网页V8.18、3D网页V8.20。实车故障可用小车诊断记录工具留痕。尤其注意：基座使用PA2/PA3，气体使用PC10/PC11；自动复走已删除，保存路线和位置扫描快照必须保留；离线模拟数据不是实测；后轮故障和换板结果仍须向我核实。先说明你理解的系统组成和发现的版本差异，再按我后续需求工作。不要重写整个项目，不要将旧聊天中的接线、故障和功能当作当前事实。
