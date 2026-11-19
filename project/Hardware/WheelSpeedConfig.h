@@ -9,6 +9,9 @@
 #endif
 #define WHEEL_SPEED_CPR 374U /* A rising only: 11 PPR x 34; verify by turning a wheel. */
 #define WHEEL_ENCODER_SIGNS {1,-1,1,-1}
+/* All four wheels reported positive signed RPM at -298 logical PWM on this chassis.
+ * This sign maps between logical motor commands and encoder-signed wheel speed. */
+#define WHEEL_PWM_TO_RPM_SIGN (-1)
 #define WHEEL_SPEED_MAX_RPM 30.0f /* Initial low-speed request cap, NOT guaranteed actual speed. */
 #define WHEEL_SPEED_PERIOD_MS 40U
 #define WHEEL_SPEED_MAX_GAP_MS 120U
@@ -28,6 +31,9 @@
 #define WHEEL_SPEED_WRONG_DIRECTION_MS 240U
 #if WHEEL_SPEED_ENABLE != 0 && WHEEL_SPEED_ENABLE != 1
 #error WHEEL_SPEED_ENABLE must be 0 (monitor) or 1 (closed-loop).
+#endif
+#if WHEEL_PWM_TO_RPM_SIGN != -1 && WHEEL_PWM_TO_RPM_SIGN != 1
+#error Wheel PWM-to-RPM sign must be +1 or -1.
 #endif
 #if WHEEL_SPEED_CPR < 1 || WHEEL_SPEED_CPR > 1000000
 #error Invalid 1x encoder counts per revolution.

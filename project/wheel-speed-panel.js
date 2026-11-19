@@ -43,14 +43,32 @@
     if(!valid(d)){data=null;render();return;}
     data=d;lastAt=Date.now();
     if(d.online&&d.valid&&d.sequence!==lastSequence){
-      const last=history[history.length-1];history.push({at:lastAt,rpm:d.measuredRpm10.map(n=>n/10),target:d.enabled?d.targetRpm10.map(n=>n/10):null,pwm:d.pwm.slice(),enabled:d.enabled,fault:d.fault,faultWheels:d.faultWheels,sampleMs:d.sampleMs,gap:!!last&&(lastAt-last.at>700||((d.sequence-lastSequence)>>>0)>=2147483648)});
+      const last=history[history.length-1];
+      const report=root.readReturnObservation?.();
+      history.push({at:lastAt,rpm:d.measuredRpm10.map(n=>n/10),target:d.enabled?d.targetRpm10.map(n=>n/10):null,pwm:d.pwm.slice(),enabled:d.enabled,fault:d.fault,faultWheels:d.faultWheels,sampleMs:d.sampleMs,gap:!!last&&(lastAt-last.at>700||((d.sequence-lastSequence)>>>0)>=2147483648),
+        returnReport:report&&lastAt>=report.at&&lastAt-report.at<=1000?report:null});
       if(history.length>120)history.shift();lastSequence=d.sequence;$('export').disabled=false;draw();
     }
     render();
   }};
   $('export').onclick=()=>{
     const simulated=root.RoverDemo&&root.RoverDemo.enabled;
-    const lines=[simulated?'# 巡检回放；四轮转速与路径同步。':'# 轮速诊断；PWM为逻辑命令，不是电流或驱动执行确认。','time,closed_loop,fault,fault_wheels,sample_ms,rpm1,rpm2,rpm3,rpm4,target1,target2,target3,target4,pwm1,pwm2,pwm3,pwm4',...history.map(p=>[new Date(p.at).toISOString(),p.enabled?1:0,p.fault,p.faultWheels,p.sampleMs,...p.rpm,...(p.target||['','','','']),...p.pwm].join(','))];
+    let note=simulated?'# 巡检回放；四轮转速与路径同步。':'# 轮速诊断。PWM 为逻辑命令。';
+    let columns='time,closed_loop,fault,fault_wheels,sample_ms,rpm1,rpm2,rpm3,rpm4,target1,target2,target3,target4,pwm1,pwm2,pwm3,pwm4';
+    if(!simulated){
+      columns+=',return_seen_at,return_boot,return_task,return_state,return_reason,return_points,return_index';
+      const r=root.readReturnObservation?.();
+      if(r)note+=' 最近一次收到主控返程状态 '+new Date(r.at).toISOString()+'，启动号 '+r.boot+'，任务 '+r.task+'，'+r.state+(r.reason?'（'+r.reason+'）':'')+'。';
+    }
+    const lines=[note,columns];
+    for(const p of history){
+      const fields=[new Date(p.at).toISOString(),p.enabled?1:0,p.fault,p.faultWheels,p.sampleMs,...p.rpm,...(p.target||['','','','']),...p.pwm];
+      if(!simulated){
+        const r=p.returnReport;
+        fields.push(...(r?[new Date(r.at).toISOString(),r.boot,r.task,r.state,r.reason,r.points,r.index]:['','','','','','','']));
+      }
+      lines.push(fields.join(','));
+    }
     const url=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=(simulated?'巡检回放_四轮诊断-':'四轮诊断-')+Date.now()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   };
   new ResizeObserver(draw).observe($('chart'));setInterval(render,500);draw();

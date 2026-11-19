@@ -11,4 +11,7 @@ void CarMotor_GetDiagnostics(uint32_t *uart_faults,uint32_t *service_gap_ms);
 void CarMotor_GetWheelSpeed(WheelSpeedFrame *frame,uint32_t sequence);
 uint8_t CarMotor_GetHoldReason(void);
 void CarMotor_EmergencyStop(void);
+void CarMotor_ReturnReceive(const char *line,uint16_t length);
+int CarMotor_ReturnStatus(char *line,uint16_t capacity);
+void CarMotor_CancelReturn(uint8_t reason);
 #endif

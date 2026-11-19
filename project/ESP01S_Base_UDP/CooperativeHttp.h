@@ -137,6 +137,7 @@ private:
       case 204: reason="No Content"; break;
       case 400: reason="Bad Request"; break;
       case 404: reason="Not Found"; break;
+      case 409: reason="Conflict"; break;
       case 410: reason="Gone"; break;
       case 431: reason="Request Header Fields Too Large"; break;
       case 500: reason="Internal Server Error"; break;

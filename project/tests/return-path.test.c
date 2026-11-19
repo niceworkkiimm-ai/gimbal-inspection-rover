@@ -1,0 +1,175 @@
+#include "ReturnPath.h"
+#include "ReturnProtocol.h"
+#include "WheelSpeed.h"
+#include "CarLogic.h"
+#include "CarConfig.h"
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+static ReturnPath s;
+static uint32_t now,counts[4];
+static const int signs[4]=WHEEL_ENCODER_SIGNS;
+static void tick(uint32_t dt,int a,int b,int c,int d,int healthy,int ready){
+    int v[4]={a,b,c,d};unsigned i;now+=dt;
+    for(i=0;i<4;i++)counts[i]+=(uint32_t)(v[i]*signs[i]);
+    ReturnPath_Step(&s,now,counts,(uint8_t)healthy,(uint8_t)ready);
+}
+static void init(void){
+    unsigned i;ReturnPath_Init(&s);s.boot=913;now=0;
+    for(i=0;i<4;i++)counts[i]=0;
+    tick(0,0,0,0,0,1,1);
+    for(i=0;i<13;i++)tick(40,0,0,0,0,1,1);
+    assert(s.ready);ReturnPath_Command(&s,913,1,RETURN_SET,0,now);
+    assert(s.state==RETURN_RECORDING&&s.count==1);
+}
+static void park(void){unsigned i;for(i=0;i<13;i++)tick(40,0,0,0,0,1,1);assert(s.ready);}
+static void start(void){park();ReturnPath_Command(&s,913,2,RETURN_START,1,now);assert(s.state==RETURN_RUNNING);}
+static void zero(void){unsigned i;for(i=0;i<4;i++)assert(s.demand[i]==0);}
+static void checks_logged_drive_polarity(void)
+{
+    WheelSpeed wheel;
+    unsigned i;
+    init();
+    /* The field log shows all four signed RPMs positive under -298 PWM.
+       These are the approximate signed ticks in one 40 ms sample. */
+    tick(40,27,26,26,26,1,0);
+    start();
+    tick(40,0,0,0,0,1,1);
+    WheelSpeed_Init(&wheel);
+    WheelSpeed_Step(&wheel,now,counts,s.demand,1,1);
+    WheelSpeed_Step(&wheel,now+40,counts,s.demand,1,1);
+    for(i=0;i<4;i++){
+        assert(s.demand[i]>0);      /* Undo the negative manual PWM. */
+        assert(wheel.target[i]<0); /* Reduce the recorded positive wheel displacement. */
+        assert(wheel.output[i]>0);
+    }
+    puts("PASS measured chassis polarity: positive outbound RPM unwinds with positive logical PWM");
+}
+static void ideal_return(void){
+    unsigned step,i;uint32_t pulse=0;double pos[4],fraction[4]={0};
+    for(i=0;i<4;i++)pos[i]=counts[i];
+    (void)pos;
+    for(step=0;step<10000&&s.state==RETURN_RUNNING;step++){
+        uint16_t target=s.index;
+        now+=40;ReturnPath_Heartbeat(&s,s.boot,s.task,++pulse,now);
+        for(i=0;i<4;i++){
+            int delta;fraction[i]-=s.demand[i]/10.0*WHEEL_SPEED_CPR*40.0/60000.0;
+            delta=(int)fraction[i];fraction[i]-=delta;counts[i]+=(uint32_t)(delta*signs[i]);
+        }
+        ReturnPath_Step(&s,now,counts,1,1);
+        if(s.index!=target||s.state==RETURN_DONE)
+            for(i=0;i<4;i++)assert(abs((int32_t)(counts[i]-s.point[target][i]))<=RETURN_TOLERANCE_TICKS);
+    }
+    assert(s.state==RETURN_DONE);zero();
+    for(i=0;i<4;i++)assert(abs((int32_t)(counts[i]-s.point[0][i]))<=RETURN_TOLERANCE_TICKS);
+}
+static void checks_protocol(void){
+    char line[160];uint32_t v[4];int n;
+    n=ReturnFinish(line,sizeof(line),snprintf(line,sizeof(line),"Q1,4294967295,12,2,1"));
+    assert(ReturnFields(line,n-1,'1',v,4)&&v[0]==UINT32_MAX&&v[2]==2);
+    line[5]^=1;assert(!ReturnFields(line,n-1,'1',v,4));
+    n=ReturnFinish(line,sizeof(line),snprintf(line,sizeof(line),"Q1,4294967296,12,2,1"));
+    assert(!ReturnFields(line,n-1,'1',v,4));
+    n=ReturnFinish(line,sizeof(line),snprintf(line,sizeof(line),"Q1,1,12,2,1,7"));
+    assert(!ReturnFields(line,n-1,'1',v,4));
+    assert(!ReturnFields("Q1,",3,'1',v,4));
+    puts("PASS CRC, integer overflow, trailing fields and truncated frames");
+}
+static void checks_commands(void){
+    uint16_t n;init();
+    tick(40,16,16,16,16,1,0);n=s.count;
+    ReturnPath_Command(&s,913,1,RETURN_SET,0,now);assert(s.count==n);
+    ReturnPath_Command(&s,914,2,RETURN_START,1,now);assert(s.ack==1&&s.state==RETURN_RECORDING);
+    ReturnPath_Command(&s,913,2,RETURN_START,1,now);assert(s.result==RETURN_NOT_READY);
+    park();ReturnPath_Command(&s,913,3,RETURN_START,7,now);assert(s.result==RETURN_BAD_TASK);
+    ReturnPath_Command(&s,913,4,RETURN_START,1,now);assert(s.state==RETURN_RUNNING);
+    ReturnPath_Command(&s,913,4,RETURN_SET,1,now);assert(s.state==RETURN_RUNNING);
+    ReturnPath_Command(&s,913,5,RETURN_CANCEL,1,now);assert(s.state==RETURN_ABORTED&&s.stop_requested);
+    ReturnPath_Command(&s,913,4,RETURN_START,1,now);assert(s.state==RETURN_ABORTED);
+    ReturnPath_Command(&s,913,6,RETURN_START,1,now);assert(s.state==RETURN_ABORTED);
+    init();ReturnPath_Command(&s,913,2,RETURN_START,1,now);assert(s.result==RETURN_NO_PATH);
+    init();tick(40,16,16,16,16,1,0);start();
+    ReturnPath_Command(&s,913,1,RETURN_CANCEL,0,now);
+    assert(s.state==RETURN_ABORTED&&s.stop_requested&&s.ack==2);
+    puts("PASS stationary start, task/boot match, duplicate/old commands, stop and no resume");
+}
+static void checks_paths(void){
+    unsigned i;init();for(i=0;i<20;i++)tick(40,10,10,10,10,1,0);
+    start();ideal_return();
+    init();for(i=0;i<20;i++)tick(40,10,10,10,10,1,0);
+    for(i=0;i<12;i++)tick(40,-10,10,-10,10,1,0);
+    for(i=0;i<20;i++)tick(40,10,10,10,10,1,0);
+    start();ideal_return();
+    init();for(i=0;i<20;i++)tick(40,6,12,6,12,1,0);
+    for(i=0;i<20;i++)tick(40,12,6,12,6,1,0);
+    for(i=0;i<15;i++)tick(40,-8,-8,-8,-8,1,0);
+    start();ideal_return();
+    init();tick(40,7,7,7,7,1,0);tick(40,-3,-3,-3,-3,1,0);
+    assert(s.count==2&&s.point[1][0]==7);start();ideal_return();
+    init();for(i=0;i<4;i++)counts[i]=UINT32_MAX-20;
+    s.state=RETURN_IDLE;tick(40,0,0,0,0,1,1);park();
+    ReturnPath_Command(&s,s.boot,2,RETURN_SET,1,now);
+    for(i=0;i<20;i++)tick(40,10,10,10,10,1,0);
+    park();ReturnPath_Command(&s,s.boot,3,RETURN_START,2,now);ideal_return();
+    puts("PASS straight, L turn, curves, reverse segments, small reversals and count wrap");
+}
+static void checks_faults(void){
+    unsigned i;init();tick(40,16,16,16,16,1,0);start();tick(40,0,0,0,0,1,0);
+    assert(s.state==RETURN_ABORTED&&s.reason==RETURN_MANUAL);zero();
+    init();tick(40,16,16,16,16,1,0);start();
+    for(i=0;i<40;i++){ReturnPath_Heartbeat(&s,s.boot,s.task,0,now);tick(40,0,0,0,0,1,1);}
+    assert(s.reason==RETURN_BROWSER);zero();
+    ReturnPath_Heartbeat(&s,s.boot,s.task,1,now);assert(s.state==RETURN_ABORTED);
+    init();tick(121,1,1,1,1,1,0);assert(s.reason==RETURN_GAP);zero();
+    init();tick(40,1000,0,0,0,1,0);assert(s.reason==RETURN_COUNTS);
+    init();tick(40,0,0,0,0,0,1);assert(s.reason==RETURN_FEEDBACK);
+    init();for(i=0;i<RETURN_CAPACITY;i++)tick(40,16,16,16,16,1,0);
+    assert(s.state==RETURN_ABORTED&&s.reason==RETURN_FULL&&s.count==RETURN_CAPACITY&&s.point[0][0]==0);
+    init();tick(40,16,16,16,16,1,0);start();
+    for(i=1;i<205;i++){now+=40;ReturnPath_Heartbeat(&s,s.boot,s.task,i,now);ReturnPath_Step(&s,now,counts,1,1);}
+    assert(s.reason==RETURN_TIMEOUT);zero();
+    puts("PASS takeover, lost/replayed heartbeat, gap, bad encoder, full buffer and no-progress timeout");
+}
+static void checks_pi(void){
+    WheelSpeed w;int16_t demand[4]={120,120,120,120};uint32_t c[4]={0};unsigned i;uint32_t t;
+    WheelSpeed_Init(&w);
+    for(t=0;t<2000;t+=40)WheelSpeed_Step(&w,t,c,demand,1,1);
+    assert(w.fault&WHEEL_FAULT_NO_FEEDBACK);
+    for(i=0;i<4;i++)assert(w.output[i]==0);
+    WheelSpeed_Init(&w);
+    for(t=0;t<1600;t+=40){
+        /* Positive PWM should give negative signed RPM. Reverse only the front left. */
+        for(i=0;i<4;i++)c[i]+=(uint32_t)((i==0?6:-6)*signs[i]);
+        WheelSpeed_Step(&w,t,c,demand,1,1);
+    }
+    assert(w.fault==WHEEL_FAULT_DIRECTION&&w.fault_wheels==1);
+    for(i=0;i<4;i++)assert(w.output[i]==0);
+    puts("PASS inner PI stops all wheels on missing feedback or a reversed front-left encoder");
+}
+static void checks_plant(void){
+    WheelSpeed w;unsigned i,j;double speed[4]={0},fraction[4]={0};
+    /* Mean signed RPMs at -298 logical PWM in the 24 driving samples, 2026-11-18.
+       This plant fixture is independent of the controller's sign configuration. */
+    const double rpm_at_minus_298[4]={108.23,104.52,104.40,103.59};
+    init();for(i=0;i<30;i++)tick(40,8,12,8,12,1,0);
+    for(i=0;i<20;i++)tick(40,-8,8,-8,8,1,0);
+    for(i=0;i<30;i++)tick(40,12,8,12,8,1,0);
+    start();WheelSpeed_Init(&w);
+    for(j=1;j<20000&&s.state==RETURN_RUNNING;j++){
+        now+=40;ReturnPath_Heartbeat(&s,s.boot,s.task,j,now);
+        for(i=0;i<4;i++){
+            int d;speed[i]+=(w.output[i]*rpm_at_minus_298[i]/-298.0-speed[i])*0.5;
+            fraction[i]+=speed[i]*WHEEL_SPEED_CPR*40/60000.0;
+            d=(int)fraction[i];fraction[i]-=d;counts[i]+=(uint32_t)(d*signs[i]);
+        }
+        ReturnPath_Step(&s,now,counts,(uint8_t)!w.fault,1);
+        WheelSpeed_Step(&w,now,counts,s.demand,1,(uint8_t)(s.state==RETURN_RUNNING));
+        for(i=0;i<4;i++)assert(fabs(w.target[i])<=RETURN_MAX_RPM+0.001);
+    }
+    assert(s.state==RETURN_DONE&&!w.fault);
+    for(i=0;i<4;i++)assert(abs((int32_t)(counts[i]-s.point[0][i]))<=RETURN_TOLERANCE_TICKS);
+    puts("PASS end-to-end position plus speed PI with unequal first-order wheel models");
+}
+int main(void){checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}

@@ -1,9 +1,16 @@
-/* V8.9 / 2026-09-15: manual vehicle control only; route replay removed.
- * Manual limits, neutral checks, link/deadline stop and RPM monitoring retained. */
+/* V8.17 / 2026-11-17: locally recorded reverse return uses the wheel PI.
+ * Manual limits, neutral checks and independent link/deadline stop retained. */
 #include "CarMotor.h"
 #include "CarConfig.h"
 #include "WheelSpeed.h"
 #include "WheelEncoder.h"
+#include "ReturnPath.h"
+#include "ReturnProtocol.h"
+
+static ReturnPath return_path;
+/* ISR reads only these aligned volatile lease values. */
+static volatile uint8_t return_active;
+static volatile uint32_t return_lease_ms;
 
 static CarLogic car;
 static WheelSpeed wheel_speed;
@@ -42,6 +49,7 @@ void TIM7_IRQHandler(void)
     if((uint32_t)(motor_ms-main_seen_ms)>CAR_MAIN_DEADLINE_MS)latched_fault=1U;
     if(!sample_live||(uint32_t)(DWT->CYCCNT-sample_cycles)>
        (SystemCoreClock/1000U)*CAR_LINK_TIMEOUT_MS)lease_lost=1U;
+    if(return_active&&(uint32_t)(motor_ms-return_lease_ms)>RETURN_BROWSER_TIMEOUT_MS)lease_lost=1U;
     if(latched_fault||lease_lost)BrakeOutputs();
 }
 static void SetOutputs(const int16_t logical_pwm[4])
@@ -105,7 +113,10 @@ void CarMotor_Init(void)
     gpio.GPIO_Pin=GPIO_Pin_6|GPIO_Pin_7;GPIO_Init(GPIOC,&gpio);
     gpio.GPIO_Pin=GPIO_Pin_5|GPIO_Pin_6;GPIO_Init(GPIOE,&gpio);
     TIM_CtrlPWMOutputs(TIM8,ENABLE);TIM_Cmd(TIM8,ENABLE);TIM_Cmd(TIM9,ENABLE);
-    CarLogic_Init(&car,0);WheelSpeed_Init(&wheel_speed);initialized=1U;
+    CarLogic_Init(&car,0);WheelSpeed_Init(&wheel_speed);ReturnPath_Init(&return_path);
+    RCC_AHB2PeriphClockCmd(RCC_AHB2Periph_RNG,ENABLE);
+    RNG->CR |= RNG_CR_RNGEN; /* Nonblocking boot nonce; unavailable RNG disables return. */
+    initialized=1U;
     /* Independent 1ms software safety tick; no SysTick/Delay ownership conflict. */
     TIM_TimeBaseStructInit(&timer);
     timer.TIM_Prescaler=(uint16_t)(apb1_timer/1000000U-1U);timer.TIM_Period=999U;
@@ -117,12 +128,15 @@ void CarMotor_Init(void)
 void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *data,uint8_t rx_fault)
 {
     uint32_t primask=__get_PRIMASK(),now;
-    uint8_t fresh=0U,ready=0U,allowed,i;
+    uint8_t fresh=0U,ready=0U,allowed,i,centered,was_return,closed_loop;
     uint32_t packet=0U;
     int16_t roll=0,pitch=0;
     int16_t demand[4],output[4];
     EncoderFrame encoder;
     if(!initialized)return;
+    if(!return_path.boot&&(RNG->SR & RNG_SR_DRDY)&&
+       !(RNG->SR & (RNG_SR_CECS|RNG_SR_SECS)))return_path.boot=RNG->DR;
+    was_return=(uint8_t)(return_path.state==RETURN_RUNNING);
     __disable_irq();
     now=motor_ms;
     if(active&&mode==WIRELESS_MODE_CAR) {
@@ -143,10 +157,26 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
     }
     sample_live=fresh;
     if(fresh&&(!have_epoch||mode_epoch!=data->mode_epoch)) {
+        if(was_return)ReturnPath_Abort(&return_path,RETURN_MANUAL);
         mode_epoch=data->mode_epoch;have_epoch=1U;
         CarLogic_Stop(&car,now,CAR_NEUTRAL);
     }
-    if(lease_lost){CarLogic_Stop(&car,now,CAR_LINK_LOST);lease_lost=0U;}
+    if(lease_lost){
+        ReturnPath_Abort(&return_path,return_active&&
+          (uint32_t)(now-return_lease_ms)>RETURN_BROWSER_TIMEOUT_MS?RETURN_BROWSER:RETURN_LINK);
+        CarLogic_Stop(&car,now,CAR_LINK_LOST);lease_lost=0U;
+    }
+    centered=(uint8_t)(roll-CAR_ROLL_ZERO_TENTHS<=CAR_NEUTRAL_TENTHS&&
+        roll-CAR_ROLL_ZERO_TENTHS>=-CAR_NEUTRAL_TENTHS&&
+        pitch-CAR_PITCH_ZERO_TENTHS<=CAR_NEUTRAL_TENTHS&&
+        pitch-CAR_PITCH_ZERO_TENTHS>=-CAR_NEUTRAL_TENTHS);
+    if(was_return&&(!active||!fresh||!ready||!centered||rx_fault||latched_fault)){
+        ReturnPath_Abort(&return_path,!fresh?RETURN_LINK:rx_fault||latched_fault?RETURN_FEEDBACK:RETURN_MANUAL);
+        CarLogic_Stop(&car,now,CAR_NEUTRAL);
+    }
+    if(return_path.stop_requested){
+        return_path.stop_requested=0;CarLogic_Stop(&car,now,CAR_NEUTRAL);
+    }
     CarLogic_Step(&car,now,(uint8_t)(mode==WIRELESS_MODE_CAR),
                    (uint8_t)CAR_RUNTIME_ENABLE,(uint8_t)!latched_fault,
                    rx_fault,fresh,ready,packet,roll,pitch);
@@ -161,15 +191,27 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
      */
     WheelEncoder_Snapshot(&encoder,0);
     if(mode!=WIRELESS_MODE_CAR)WheelSpeed_ClearFault(&wheel_speed);
+    ReturnPath_Step(&return_path,encoder.milliseconds,encoder.count,
+        (uint8_t)(!rx_fault&&!latched_fault&&!wheel_speed.fault),
+        (uint8_t)(allowed&&centered&&wheel_speed.valid));
+    return_lease_ms=return_path.lease_ms;
+    return_active=(uint8_t)(return_path.state==RETURN_RUNNING);
+    closed_loop=(uint8_t)(WHEEL_SPEED_ENABLE||return_active||was_return);
+    if(return_active)for(i=0;i<4;i++)demand[i]=return_path.demand[i];
+    if(was_return&&!return_active){
+        allowed=0;CarLogic_Stop(&car,now,CAR_NEUTRAL);
+        for(i=0;i<4;i++)demand[i]=0;
+    }
     WheelSpeed_Step(&wheel_speed,encoder.milliseconds,encoder.count,demand,
-                    WHEEL_SPEED_ENABLE,allowed);
-    for(i=0;i<4;i++)output[i]=WHEEL_SPEED_ENABLE?wheel_speed.output[i]:demand[i];
+                    closed_loop,allowed);
+    for(i=0;i<4;i++)output[i]=closed_loop?wheel_speed.output[i]:demand[i];
 
     __disable_irq();
     /* TIM7 may have stopped outputs during the calculation. Never re-enable
      * them from an older foreground decision: recheck latched state and age.
      */
-    if(WHEEL_SPEED_ENABLE&&wheel_speed.fault){
+    if(closed_loop&&wheel_speed.fault){
+        ReturnPath_Abort(&return_path,RETURN_FEEDBACK);return_active=0;
         latched_fault=1U;CarLogic_Stop(&car,motor_ms,CAR_FAULT);
     }
     if(!active||!allowed||latched_fault||lease_lost||!sample_live||
@@ -185,6 +227,8 @@ void CarMotor_GetStatus(uint8_t *state,int16_t pwm[4])
     __disable_irq();
     *state=latched_fault?CAR_FAULT:lease_lost?CAR_LINK_LOST:car.state;
     for(i=0;i<4;i++)pwm[i]=(latched_fault||lease_lost)?0:applied_pwm[i];
+    if(return_active&&!latched_fault&&!lease_lost&&
+       (pwm[0]||pwm[1]||pwm[2]||pwm[3]))*state=CAR_MOVING;
     if(!primask)__enable_irq();
 }
 uint8_t CarMotor_GetHoldReason(void)
@@ -204,7 +248,7 @@ void CarMotor_GetWheelSpeed(WheelSpeedFrame *frame,uint32_t sequence)
     uint32_t primask;
     float value;
     frame->sequence=sequence;frame->milliseconds=wheel_speed.last_ms;
-    frame->enabled=(uint8_t)WHEEL_SPEED_ENABLE;frame->valid=wheel_speed.valid;
+    frame->enabled=wheel_speed.enabled;frame->valid=wheel_speed.valid;
     frame->fault=fault;frame->fault_wheels=fault_wheels;
     frame->limited=wheel_speed.limited;frame->cpr=WHEEL_SPEED_CPR;frame->sign_mask=0;
     frame->dt_ms=(uint16_t)(wheel_speed.sample_dt>65535U?65535U:wheel_speed.sample_dt);
@@ -219,4 +263,29 @@ void CarMotor_GetWheelSpeed(WheelSpeedFrame *frame,uint32_t sequence)
     primask=__get_PRIMASK();__disable_irq();
     for(i=0;i<4;i++)frame->pwm[i]=(latched_fault||lease_lost)?0:applied_pwm[i];
     if(!primask)__enable_irq();
+}
+
+void CarMotor_CancelReturn(uint8_t reason)
+{
+    uint8_t running=(uint8_t)(return_path.state==RETURN_RUNNING);
+    if(running){ReturnPath_Abort(&return_path,reason);return_path.stop_requested=1;}
+}
+void CarMotor_ReturnReceive(const char *line,uint16_t length)
+{
+    uint32_t v[4];
+    if(ReturnFields(line,length,'1',v,4)&&v[2]>=RETURN_SET&&v[2]<=RETURN_CANCEL)
+        ReturnPath_Command(&return_path,v[0],v[1],(uint8_t)v[2],v[3],motor_ms);
+    else if(ReturnFields(line,length,'3',v,3)){
+        ReturnPath_Heartbeat(&return_path,v[0],v[1],v[2],motor_ms);
+        return_lease_ms=return_path.lease_ms;
+    }
+}
+int CarMotor_ReturnStatus(char *line,uint16_t capacity)
+{
+    return ReturnFinish(line,capacity,snprintf(line,capacity,
+        "Q2,%lu,%lu,%u,%lu,%u,%u,%u,%u,%u,%u,%lu",
+        (unsigned long)return_path.boot,(unsigned long)return_path.ack,
+        return_path.result,(unsigned long)return_path.task,return_path.state,
+        return_path.reason,return_path.count,return_path.index,return_path.ready,
+        return_path.command_action,(unsigned long)return_path.command_task));
 }

@@ -1,10 +1,11 @@
 #include "secrets.h"
+/* V4.12: reverse-return Q1/Q2/Q3 bridge, MCU ACK and browser lease. Wiring unchanged. */
 /*
- * 固件版本: V4.11
- * 当前接线（STM32 V8.16）：ESP TX->PA3(USART2_RX)，RX->PA2(USART2_TX)。
+ * 固件版本: V4.12
+ * 当前接线（STM32 V8.17）：ESP TX->PA3(USART2_RX)，RX->PA2(USART2_TX)。
  * 原PA9/PA10信号线撤掉；VCC/EN稳定3.3V、GND共地不变；115200/8N1不变。
  * 本次需重烧基座 ESP；下方旧串口条目为历史。
- * 更新日期: 2026-11-11
+ * 更新日期: 2026-11-17
  * V4.11：释放 HTTP 连接时不等待对端 ACK，分别统计 UDP 接收、串口转发和主控接收故障。
  * V4.10：HTTP 分段处理，让手持 UDP 和串口持续得到服务，并提供链路诊断。
  * V4.9：删除自动按路线行驶R1/R2接口，旧/api/route返回410；路线记录/保存补传与手持转发保留，接线不变。
@@ -205,7 +206,7 @@ footer{min-height:48px;padding:0 20px;display:flex;align-items:center;justify-co
 <body>
 <div class="shell">
 <header class="topbar">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.11</span></p></div></div>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.12</span></p></div></div>
   <div id="state" class="state" data-online="false"><i aria-hidden="true"></i><span>等待基座数据</span></div>
 </header>
 <main>
@@ -311,6 +312,7 @@ setInterval(update,500);update();
 )HTML";
 
 #include "RouteLogBridge.h"
+#include "ReturnBridge.h"
 // Explicitly reject cached old pages; this endpoint cannot enqueue motor commands.
 void sendRouteRemoved(){
   server.send(410,"application/json; charset=utf-8",
@@ -550,6 +552,7 @@ void readStm32Telemetry() {
         else if (telemetryLine[0] == 'E') parseEncoderLine(telemetryLine);
         else if (telemetryLine[0] == 'S') parseWheelSpeedLine(telemetryLine);
         else if (telemetryLine[0] == 'J') parseJournalLine(telemetryLine);
+        else if (telemetryLine[0] == 'Q') parseReturnLine(telemetryLine);
       }
       telemetryLength = 0; discardTelemetryLine = false; continue;
     }
@@ -627,12 +630,14 @@ void handleHttp(const char *method,const char *path) {
   const bool get=!strcmp(method,"GET");
   if (!strcmp(method,"OPTIONS") &&
       (!strcmp(path,"/api/telemetry") || !strcmp(path,"/api/scan") ||
-       !strcmp(path,"/api/route") || !strcmp(path,"/api/route-log"))) {
+       !strcmp(path,"/api/return") || !strcmp(path,"/api/route") || !strcmp(path,"/api/route-log"))) {
     server.send(204,"text/plain","");
   } else if (get && !strcmp(path,"/")) sendControlPage();
   else if (get && !strcmp(path,"/api/telemetry")) sendTelemetryJson();
   else if (get && !strcmp(path,"/api/scan")) sendScanCommand();
   else if (get && !strcmp(path,"/api/route-log")) sendJournal();
+  else if (get && !strcmp(path,"/api/return")) sendReturnStatus();
+  else if (!strcmp(method,"POST") && !strcmp(path,"/api/return")) sendReturnCommand();
   else if ((get || !strcmp(method,"POST")) && !strcmp(path,"/api/route")) sendRouteRemoved();
   else server.send(404,"application/json","{\"error\":\"not_found\"}");
 }

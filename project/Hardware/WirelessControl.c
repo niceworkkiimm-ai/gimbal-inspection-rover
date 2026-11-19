@@ -7,6 +7,7 @@
 #include "HandheldProtocol.h"
 #include "CarMotor.h"
 #include "RouteLog.h"
+#include "ReturnPath.h"
 #include <stdio.h>
 
 #define RX_LINE_CAPACITY       160U
@@ -294,8 +295,12 @@ void WirelessControl_Poll(void)
             (SystemCoreClock/1000U)*250U) continue;
         if (ParseModeFrame(&line, &mode))
         {
+            CarMotor_CancelReturn(RETURN_MANUAL);
             control_mode = mode;
             continue;
+        }
+        if(line.length>=3U&&line.data[0]=='Q'&&line.data[2]==','){
+            CarMotor_ReturnReceive(line.data,line.length);continue;
         }
         if(line.length>=3U&&line.data[0]=='J'&&line.data[1]=='1'&&line.data[2]==','){
             RouteLog_Query(line.data,line.length);
@@ -324,6 +329,7 @@ void WirelessControl_Poll(void)
                A web stop remains stopped until an actual button-mode change. */
             if (!hand_mode_valid || hand_mode!=hand.mode || hand_epoch!=hand.epoch)
             {
+                CarMotor_CancelReturn(RETURN_MANUAL);
                 control_mode=hand.mode==1U?WIRELESS_MODE_CAR:
                              hand.mode==2U?WIRELESS_MODE_STOPPED:WIRELESS_MODE_HANDHELD;
                 hand_mode=hand.mode;hand_epoch=hand.epoch;hand_mode_valid=1U;
@@ -365,10 +371,12 @@ void WirelessControl_SendVehicle(uint32_t sequence,uint8_t mode,uint8_t state,
 void WirelessControl_SendControlDiagnostics(uint8_t hold,uint32_t uart_faults,
                                            uint32_t service_gap_ms)
 {
-    char line[40];
+    char line[160];
     int n=snprintf(line,sizeof(line),"D,%u,%lu,%lu\n",(unsigned)hold,
         (unsigned long)uart_faults,(unsigned long)service_gap_ms);
     if(n>0&&n<(int)sizeof(line))QueueTx(line,(uint16_t)n);
+    n=CarMotor_ReturnStatus(line,sizeof(line));
+    if(n>0)QueueTx(line,(uint16_t)n);
 }
 
 void WirelessControl_SendEncoder(const EncoderFrame *frame)

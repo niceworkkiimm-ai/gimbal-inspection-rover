@@ -29,7 +29,7 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
                      const int16_t demand[4],uint8_t enabled,uint8_t allowed)
 {
     uint32_t dt,total_ms=0;
-    int32_t ticks[4],target_sign;
+    int32_t ticks[4],target_sign,rpm_sign;
     int64_t magnitude,limit,total;
     uint8_t i,j,new_sample=0;
     float seconds,desired,measured,error,next_i,unsaturated,goal,step;
@@ -92,8 +92,9 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
         if(!s->started[i]){s->started[i]=1;s->started_ms[i]=s->moved_ms[i]=now;s->wrong[i]=0;}
         s->previous_sign[i]=(int8_t)target_sign;
         desired=Clamp(Abs((float)demand[i])*WHEEL_SPEED_MAX_RPM/CAR_MAX_PWM_PERMILLE,0,WHEEL_SPEED_MAX_RPM);
-        s->target[i]=desired*(float)target_sign;
-        measured=s->rpm[i]*(float)target_sign;
+        rpm_sign=target_sign*WHEEL_PWM_TO_RPM_SIGN;
+        s->target[i]=desired*(float)rpm_sign;
+        measured=s->rpm[i]*(float)rpm_sign;
         if((uint32_t)(now-s->started_ms[i])>=WHEEL_SPEED_START_GRACE_MS){
             if(s->output[i]&&Abs((float)s->output[i])>=80.0f&&
                (uint32_t)(now-s->moved_ms[i])>=WHEEL_SPEED_STALL_MS){
