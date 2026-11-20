@@ -273,4 +273,67 @@ static void checks_return_breakaway(void)
     puts("PASS bounded start assist, release on motion, feedback timeout and manual PI isolation");
 }
 
-int main(void){checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+static void checks_dense_straight(void)
+{
+    WheelSpeed w;
+    double speed[4]={0}, fraction[4]={0};
+    unsigned i,j,pass_stops=0,passes=0;
+    uint32_t started;
+    init();
+    for(i=0;i<110;i++)tick(40,16,15,16,15,1,0);
+    assert(s.count==111);
+    start();started=now;WheelSpeed_Init(&w);
+    for(j=0;j<14000 && s.state==RETURN_RUNNING;j++){
+        uint16_t before=s.index;
+        int any=0;
+        now+=40;
+        ReturnPath_Heartbeat(&s,s.boot,s.task,j+1,now);
+        for(i=0;i<4;i++){
+            int pwm=w.output[i], ticks;
+            /* Same synthetic load for both versions; breakaway and rolling
+             * friction differ and the wheels have slightly different gain. */
+            double duty=fabs((double)pwm);
+            double threshold=fabs(speed[i])<0.45?50.0:31.0;
+            double goal=duty<threshold?0.0:(pwm>0?-1:1)*(duty-30.0)*(0.38+0.01*i);
+            speed[i]+=0.5*(goal-speed[i]);
+            fraction[i]+=speed[i]*WHEEL_SPEED_CPR*40/60000.0;
+            ticks=(int)fraction[i];fraction[i]-=ticks;
+            counts[i]+=(uint32_t)(ticks*signs[i]);
+        }
+        ReturnPath_Step(&s,now,counts,!w.fault,1);
+        WheelSpeed_Step(&w,now,counts,s.demand,WHEEL_PI_RETURN,s.state==RETURN_RUNNING);
+        for(i=0;i<4;i++){
+            assert(fabs(w.target[i])<=RETURN_MAX_RPM+0.001);
+            if(s.demand[i])any=1;
+        }
+        if(s.index!=before){assert(s.index+1==before);passes++;if(!any)pass_stops++;}
+    }
+    assert(s.state==RETURN_DONE && !w.fault && passes==109);
+    for(i=0;i<4;i++)assert(abs((int32_t)counts[i])<=RETURN_TOLERANCE_TICKS);
+    printf("Dense straight fixture: %lu ms, %u/%u all-wheel zero commands at pass points\n",
+           (unsigned long)(now-started),pass_stops,passes);
+    assert(pass_stops==0);
+}
+
+static void checks_preview_limits(void)
+{
+    unsigned i;
+    init();tick(40,16,16,16,16,1,0);tick(40,16,16,16,16,1,0);start();
+    /* One wheel can reach the point first; the index waits for the laggards. */
+    tick(40,-20,-8,-8,-8,1,1);assert(s.index==1);
+    tick(40,0,-8,-8,-8,1,1);assert(s.index==0);
+    for(i=0;i<4;i++)assert(s.demand[i]>0);
+    /* Similar neighboring directions must not skip a wheel that is far ahead. */
+    init();tick(80,70,70,70,70,1,0);tick(40,16,16,16,16,1,0);start();
+    tick(80,-50,-16,-16,-16,1,1);assert(s.index==1 && s.demand[0]<0);
+    /* Even with all wheel signs unchanged, a sharp change of ratios is a corner. */
+    init();tick(40,16,4,16,4,1,0);tick(40,16,16,16,16,1,0);start();
+    tick(40,-16,-16,-16,-16,1,1);assert(s.index==0);zero();
+    /* An actual sign reversal on one pair also requires the exact corner. */
+    init();tick(40,16,-16,16,-16,1,0);tick(40,16,16,16,16,1,0);start();
+    tick(40,-16,-16,-16,-16,1,1);assert(s.index==0);zero();
+    tick(40,0,0,0,0,1,1);assert(s.demand[0]>0 && s.demand[1]<0);
+    puts("PASS wheel lag, bounded overshoot, ratio corners and reversals");
+}
+
+int main(void){checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
