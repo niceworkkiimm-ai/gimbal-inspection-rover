@@ -1,5 +1,5 @@
-/* V8.9 / 2026-09-15: route-only sign correction/startup assist removed.
- * Manual monitor/optional PI behavior and fault checks are unchanged. */
+/* Four-wheel speed feedback and PI. Return mode also compensates for
+ * breakaway under load. All duty values are in permille. */
 #include "WheelSpeed.h"
 #include "CarConfig.h"
 #include <string.h>
@@ -19,7 +19,7 @@ static void Zero(WheelSpeed *s,uint32_t now)
     uint8_t i;
     for(i=0;i<4;i++){
         if(s->output[i])s->zero_ms[i]=now;
-        s->output[i]=0;s->target[i]=s->integral[i]=s->effort[i]=0;
+        s->output[i]=0;s->target[i]=s->integral[i]=s->effort[i]=s->breakaway_extra[i]=0;
         s->started[i]=s->wrong[i]=0;
     }
     s->limited=0;
@@ -32,7 +32,7 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
     int32_t ticks[4],target_sign,rpm_sign;
     int64_t magnitude,limit,total;
     uint8_t i,j,new_sample=0;
-    float seconds,desired,measured,error,next_i,unsaturated,goal,step;
+    float seconds,desired,measured,error,next_i,unsaturated,pi_goal,goal,step;
     const uint8_t enabled=(uint8_t)(mode!=WHEEL_MONITOR);
     s->enabled=enabled;
     if(!s->initialized){
@@ -80,7 +80,7 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
         target_sign=Sign(demand[i]);
         if(!target_sign||(s->previous_sign[i]&&target_sign!=s->previous_sign[i])){
             if(s->output[i])s->zero_ms[i]=now;
-            s->output[i]=0;s->effort[i]=s->integral[i]=s->target[i]=0;s->started[i]=s->wrong[i]=0;
+            s->output[i]=0;s->effort[i]=s->integral[i]=s->target[i]=s->breakaway_extra[i]=0;s->started[i]=s->wrong[i]=0;
         }
     }
     if(!new_sample)return;
@@ -109,6 +109,15 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
             }else s->wrong[i]=0;
         }
         error=desired-measured;
+        /* Once a loaded wheel breaks free below target speed, retain part of
+         * the extra duty actually needed to move it. Existing PI anti-windup,
+         * slew and direction-change reset also apply to this rolling effort. */
+        if(mode==WHEEL_PI_RETURN && error>0 &&
+           Sign(ticks[i])*encoder_sign[i]==rpm_sign){
+            s->integral[i]=Clamp(s->integral[i]+RETURN_BREAKAWAY_CARRY*s->breakaway_extra[i],
+                                 -WHEEL_SPEED_INTEGRAL_LIMIT,WHEEL_SPEED_INTEGRAL_LIMIT);
+        }
+        s->breakaway_extra[i]=0;
         next_i=Clamp(s->integral[i]+WHEEL_SPEED_KI*error*seconds,
                      -WHEEL_SPEED_INTEGRAL_LIMIT,WHEEL_SPEED_INTEGRAL_LIMIT);
         unsaturated=WHEEL_SPEED_FF*desired+WHEEL_SPEED_KP*error+next_i;
@@ -116,16 +125,20 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
         goal=Clamp(WHEEL_SPEED_FF*desired+WHEEL_SPEED_KP*error+s->integral[i],0,CAR_MAX_PWM_PERMILLE);
         if(unsaturated>=CAR_MAX_PWM_PERMILLE||goal>=CAR_MAX_PWM_PERMILLE)
             s->limited|=(uint8_t)(1U<<i);
+        pi_goal=goal;
         if(mode==WHEEL_PI_RETURN && !ticks[i]){
             uint32_t still_ms=now-s->moved_ms[i];
             if(still_ms>RETURN_BREAKAWAY_WAIT_MS){
                 float floor=Clamp((still_ms-RETURN_BREAKAWAY_WAIT_MS)*0.001f*
                                   RETURN_BREAKAWAY_RAMP,0,RETURN_BREAKAWAY_MAX);
-                if(goal<floor)goal=floor;
+                if(goal<floor)goal=Clamp(floor,0,CAR_MAX_PWM_PERMILLE);
             }
         }
         step=WHEEL_SPEED_OUTPUT_SLEW*seconds;
         s->effort[i]+=Clamp(goal-s->effort[i],-step,step);
+        if(goal>pi_goal && s->effort[i]>pi_goal){
+            s->breakaway_extra[i]=Clamp(s->effort[i]-pi_goal,0,goal-pi_goal);
+        }
         s->output[i]=(int16_t)((int32_t)(s->effort[i]+0.5f)*target_sign);
     }
     if(s->fault)Zero(s,now); /* Any feedback fault stops all four wheels; no open-loop fallback. */

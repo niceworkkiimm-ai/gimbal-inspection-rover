@@ -10,6 +10,7 @@ typedef struct {
     int32_t window_ticks[WHEEL_SPEED_WINDOW][4];
     uint32_t started_ms[4], moved_ms[4], wrong_ms[4], zero_ms[4];
     float rpm[4], target[4], integral[4], effort[4];
+    float breakaway_extra[4]; /* extra duty actually applied on the last return sample */
     int16_t output[4];
     int8_t previous_sign[4];
     uint8_t started[4], wrong[4];

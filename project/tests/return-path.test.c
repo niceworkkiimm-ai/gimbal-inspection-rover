@@ -252,7 +252,7 @@ static void checks_return_breakaway(void)
         if(w.fault)break;
     }
     assert(t<=880 && w.fault==WHEEL_FAULT_NO_FEEDBACK && w.fault_wheels==4);
-    assert(max_effort>=52 && max_effort<=(int)RETURN_BREAKAWAY_MAX);
+    assert(max_effort==(int)RETURN_BREAKAWAY_MAX);
     assert(!w.output[0] && !w.output[1] && !w.output[2] && !w.output[3]);
     WheelSpeed_Init(&w);
     for(t=0;t<=2000;t+=40){
@@ -271,6 +271,91 @@ static void checks_return_breakaway(void)
         assert(w.output[2]<52 && !w.fault);
     }
     puts("PASS bounded start assist, release on motion, feedback timeout and manual PI isolation");
+}
+
+/* Only a real pulse in the requested direction may transfer startup duty into
+ * the PI integral. Overspeed, opposite counts, stops and reversals must shed it. */
+static void checks_loaded_release(void)
+{
+    int direction;
+    for(direction=-1;direction<=1;direction+=2){
+        int motion;
+        for(motion=-1;motion<=3;motion+=2){
+            WheelSpeed w;
+            uint32_t t,c[4]={0};
+            int16_t cmd[4]={0,0,0,0};
+            int previous=0;
+            cmd[3]=(int16_t)(30*direction);
+            WheelSpeed_Init(&w);
+            for(t=0;t<=680;t+=40){
+                WheelSpeed_Step(&w,t,c,cmd,WHEEL_PI_RETURN,1);
+                assert(!w.fault && abs(w.output[3])-previous<=32);
+                previous=abs(w.output[3]);
+                assert(!w.output[0] && !w.output[1] && !w.output[2]);
+            }
+            assert(previous==(int)RETURN_BREAKAWAY_MAX);
+            c[3]+=(uint32_t)(motion*direction); /* motor and encoder signs both -1 on M4 */
+            WheelSpeed_Step(&w,t,c,cmd,WHEEL_PI_RETURN,1);
+            if(motion==1)assert(w.integral[3]>80); /* moving at 1.34 RPM, requested 3 */
+            else assert(w.integral[3]<5); /* wrong direction or already above target */
+            cmd[3]=(int16_t)-cmd[3];
+            WheelSpeed_Step(&w,t+1,c,cmd,WHEEL_PI_RETURN,1);
+            assert(!w.output[3] && !w.integral[3] && !w.breakaway_extra[3]);
+            WheelSpeed_Step(&w,t+40,c,cmd,WHEEL_PI_RETURN,1);
+            assert(!w.output[3]); /* direction dwell */
+            WheelSpeed_Step(&w,t+120,c,cmd,WHEEL_PI_RETURN,0);
+            assert(!w.output[3]);
+        }
+    }
+    puts("PASS startup duty transfer, overspeed, wrong pulses, both signs and immediate cutoff");
+}
+
+/* Ground exports, 2026-11-20: the last stationary correction on task 4
+ * was M3 at -3 RPM. Task 9 started at -8.2/-7.1/-6.6/-4.4 RPM and M4
+ * never moved. Duty thresholds below are test loads, not field measurements. */
+static void checks_loaded_start(unsigned route)
+{
+    const double static_duty[4]={128,146,176,197};
+    const double rolling_duty[4]={54,61,75,87};
+    double velocity[4]={0},fraction[4]={0};
+    unsigned i,step;
+    WheelSpeed w;
+    int maximum[4]={0};
+    init();
+    for(i=0;i<18;i++)tick(40,16,15,16,15,1,0);
+    if(route){
+        for(i=0;i<8;i++)tick(40,8,-10,8,-10,1,0);
+        tick(40,0,0,5,0,1,0); /* isolated M3 correction at parked endpoint */
+    }else{
+        tick(40,15,13,12,8,1,0); /* asymmetric endpoint as seen on the straight run */
+    }
+    start();WheelSpeed_Init(&w);
+    for(step=1;step<1600 && s.state==RETURN_RUNNING;step++){
+        now+=40;
+        ReturnPath_Heartbeat(&s,s.boot,s.task,step,now);
+        for(i=0;i<4;i++){
+            int pwm=w.output[i],ticks;
+            double duty=abs(pwm),sign=pwm<0?1.0:-1.0;
+            double threshold=fabs(velocity[i])<0.5?static_duty[i]:rolling_duty[i];
+            double goal=duty<threshold?0.0:sign*(duty-rolling_duty[i])*0.28;
+            velocity[i]+=0.60*(goal-velocity[i]);
+            fraction[i]+=velocity[i]*WHEEL_SPEED_CPR*40/60000.0;
+            ticks=(int)fraction[i];
+            fraction[i]-=ticks;
+            counts[i]+=(uint32_t)(ticks*signs[i]);
+            if(abs(pwm)>maximum[i])maximum[i]=abs(pwm);
+        }
+        ReturnPath_Step(&s,now,counts,!w.fault,1);
+        WheelSpeed_Step(&w,now,counts,s.demand,WHEEL_PI_RETURN,s.state==RETURN_RUNNING);
+        if(w.fault)break;
+    }
+    assert(s.state==RETURN_DONE && !w.fault);
+    for(i=0;i<4;i++){
+        assert(maximum[i]>=static_duty[i] && maximum[i]<=CAR_MAX_PWM_PERMILLE);
+        assert(!w.output[i] && abs((int32_t)counts[i])<=RETURN_TOLERANCE_TICKS);
+    }
+    printf("PASS loaded %s, four distinct breakaway thresholds, settled arrival\n",
+           route?"turn plus single-wheel endpoint":"straight");
 }
 
 static void checks_dense_straight(void)
@@ -354,7 +439,7 @@ static void check_cruise(int a,int b,int c,int d,int fast)
     init();
     for(i=0;i<8;i++)tick(40,a,b,c,d,1,0);
     start();
-    for(i=0;i<16;i++){
+    for(i=0;i<24;i++){
         float rpm;
         tick(40,0,0,0,0,1,1);
         rpm=peak_target();
@@ -400,4 +485,4 @@ static void checks_cruise_and_stop(void)
     puts("PASS cruise ramp, bidirectional straight, slow spin/strafe/curve, corner approach, takeover and stopped arrival");
 }
 
-int main(void){checks_cruise_and_stop();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+int main(void){checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_cruise_and_stop();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}

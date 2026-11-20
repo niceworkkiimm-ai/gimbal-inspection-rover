@@ -4,7 +4,7 @@
 #include <stdint.h>
 #define RETURN_CAPACITY 1024U
 #define RETURN_BROWSER_TIMEOUT_MS 1500U
-#define RETURN_MAX_RPM 20.0f
+#define RETURN_MAX_RPM 26.0f
 #define RETURN_APPROACH_RPM 12.0f
 #define RETURN_CRUISE_MIN_TICKS 12 /* short creep segments stay in position control */
 #define RETURN_CRUISE_RAMP_RPM_S 16.0f
