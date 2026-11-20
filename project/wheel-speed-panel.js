@@ -3,10 +3,14 @@
   'use strict';
   const target=document.getElementById('vehicle-route-panel');if(!target)return;
   const host=document.createElement('section');host.id='wheel-speed-panel';host.style.cssText='display:block;grid-column:1/-1;margin:22px 0 0';target.after(host);
+  const simulated=Boolean(root.RoverDemo && root.RoverDemo.enabled);
+  const chartLimit=120, exportLimit=simulated?chartLimit:8192;
+  const records=[];
+  let writeAt=0, clipped=false, interrupted=false;
   const shadow=host.attachShadow({mode:'open'});
   shadow.innerHTML=`<style>
   :host{color:#eaf4ee;font:14px/1.6 "Segoe UI","Microsoft YaHei",sans-serif}*{box-sizing:border-box}.card{background:#15251b;border:1px solid #35523e;border-radius:12px;overflow:hidden}header{padding:18px 22px;border-bottom:1px solid #304b39;display:flex;justify-content:space-between;gap:14px}h2{margin:0;font-size:19px}p{margin:3px 0;color:#96b19f;font-size:12px}.tag{font-size:12px;color:#e6c789;align-self:center}.wheels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:18px 22px}.wheel{padding:13px;border:1px solid #304b39;border-radius:8px;background:#102117}.name{color:#a5bdae;font-size:12px}.rpm{font-size:27px;color:#77dfa4;font-variant-numeric:tabular-nums}.row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#9fb6a7}.row b{color:#e4efe8;font-weight:500}.bar{height:5px;background:#263f2f;border-radius:4px;overflow:hidden;margin:10px 0}.bar i{display:block;height:100%;width:0;background:#70d8a0;transition:width .15s}.note{border-top:1px solid #304b39;padding:12px 22px;font-size:12px;color:#b2caba;overflow-wrap:anywhere}.error{color:#ffc785}canvas{display:block;width:100%;height:135px;padding:0 22px}button{border:1px solid #3a5843;border-radius:6px;padding:6px 10px;color:#d9eee1;background:#213a2a;cursor:pointer;font:inherit;font-size:12px}button:disabled{opacity:.4;cursor:not-allowed}.toolbar{display:flex;gap:12px;align-items:center;padding:0 22px 12px;color:#9fb6a7;font-size:12px}@media(max-width:760px){header{flex-wrap:wrap}.wheels{grid-template-columns:1fr 1fr;padding:14px;gap:9px}.rpm{font-size:23px}.note{padding:12px 14px}}
-  </style><div class="card"><header><div><h2>四轮速度反馈 <small>V8.2</small></h2><p>为低速路线复走准备 · 本面板只读，不会启动小车</p></div><span id="state" class="tag">等待新版主控诊断</span></header><div class="wheels" id="wheels"></div><canvas id="chart" aria-label="四轮实测转速曲线"></canvas><div class="toolbar"><button id="export" disabled>导出轮速诊断</button><span>最近约24秒 · 1绿 / 2蓝 / 3黄 / 4紫</span></div><div class="note" id="note">需要 STM32 V8.2 和基座 ESP V4.8。原有遥控、轨迹和档案功能不受影响。</div></div>`;
+  </style><div class="card"><header><div><h2>四轮速度反馈 <small>V8.2</small></h2><p>为低速路线复走准备 · 本面板只读，不会启动小车</p></div><span id="state" class="tag">等待新版主控诊断</span></header><div class="wheels" id="wheels"></div><canvas id="chart" aria-label="四轮实测转速曲线"></canvas><div class="toolbar"><button id="export" disabled>导出轮速诊断</button><span>曲线最近 ${chartLimit} 条 · CSV 最近 ${exportLimit} 条 · 1绿 / 2蓝 / 3黄 / 4紫</span></div><div class="note" id="note">需要 STM32 V8.2 和基座 ESP V4.8。原有遥控、轨迹和档案功能不受影响。</div></div>`;
   const $=id=>shadow.getElementById(id),names=['1 左前','2 右前','3 左后','4 右后'];
   names.forEach((name,i)=>{const card=document.createElement('div');card.className='wheel';card.innerHTML=`<div class="name">${name}</div><div class="rpm"><span id="rpm${i}">--</span> <small style="font-size:11px">RPM</small></div><div class="row"><span>目标</span><b id="target${i}">--</b></div><div class="bar"><i id="bar${i}"></i></div><div class="row"><span>PWM 命令</span><b id="pwm${i}">--</b></div>`;$('wheels').append(card);});
   let data=null,lastAt=0,lastSequence=null,history=[];
@@ -34,38 +38,57 @@
     const c=root.VehicleRoute&&root.VehicleRoute.engine.config;
     if(c&&c.confirmed&&(c.cpr!==data.cpr||c.signs.some((n,i)=>n!==data.signs[i])))note+=' 注意：网页轨迹标定与主控轮速参数不一致；修改网页不会改变主控配置。';
     if(!data.valid)note+=' 本次反馈采样无效。';
-    if(data.fault){const causes=[];if(data.fault&1)causes.push('采样超时');if(data.fault&2)causes.push('计数跳变');if(data.fault&4)causes.push('反馈反向');if(data.fault&8)causes.push('持续无脉冲/可能堵转');note+=' 异常：'+causes.join('、')+'，涉及轮子 '+names.filter((_,i)=>data.faultWheels&(1<<i)).join(' / ')+'。故障记录保留至下次路线上传；请先排查再重试。';}
+    if(data.fault){const causes=[];if(data.fault&1)causes.push('采样超时');if(data.fault&2)causes.push('计数或编码器信号异常');if(data.fault&4)causes.push('反馈反向');if(data.fault&8)causes.push('持续无脉冲/可能堵转');note+=' 异常：'+causes.join('、')+'，涉及轮子 '+names.filter((_,i)=>data.faultWheels&(1<<i)).join(' / ')+'。请在重试前导出本次诊断。';}
     if(data.limited)note+=' 部分轮子达到30% PWM上限，不保证已经达到目标转速。';
     if(root.RoverDemo&&root.RoverDemo.enabled){$('state').textContent='回放四轮转速';note='四轮转速与路径同步，停车转向时左右轮反向旋转。';}
     $('note').textContent=note;$('note').className='note'+(data.fault?' error':'');
   }
   root.WheelSpeedPanel={feed(d){
-    if(!valid(d)){data=null;render();return;}
+    if(!valid(d)){data=null;interrupted=true;render();return;}
     data=d;lastAt=Date.now();
-    if(d.online&&d.valid&&d.sequence!==lastSequence){
-      const last=history[history.length-1];
+    if(!d.online)interrupted=true;
+    if(d.online && d.sequence!==lastSequence){
+      const last=records[(writeAt+exportLimit-1)%exportLimit];
       const report=root.readReturnObservation?.();
-      history.push({at:lastAt,rpm:d.measuredRpm10.map(n=>n/10),target:d.enabled?d.targetRpm10.map(n=>n/10):null,pwm:d.pwm.slice(),enabled:d.enabled,fault:d.fault,faultWheels:d.faultWheels,sampleMs:d.sampleMs,gap:!!last&&(lastAt-last.at>700||((d.sequence-lastSequence)>>>0)>=2147483648),
-        returnReport:report&&lastAt>=report.at&&lastAt-report.at<=1000?report:null});
-      if(history.length>120)history.shift();lastSequence=d.sequence;$('export').disabled=false;draw();
+      const sample={
+        at:lastAt,sequence:d.sequence,valid:d.valid,rpm:d.valid?d.measuredRpm10.map(n=>n/10):null,
+        target:d.enabled?d.targetRpm10.map(n=>n/10):null,pwm:d.pwm.slice(),
+        enabled:d.enabled,fault:d.fault,faultWheels:d.faultWheels,sampleMs:d.sampleMs,
+        gap:interrupted || Boolean(last && (!last.valid || lastAt-last.at>700 ||
+                                            ((d.sequence-lastSequence)>>>0)>=2147483648)),
+        returnReport:report&&lastAt>=report.at&&lastAt-report.at<=1000?report:null
+      };
+      if(records.length===exportLimit)clipped=true;
+      records[writeAt]=sample;
+      writeAt=(writeAt+1)%exportLimit;
+      interrupted=false;
+      lastSequence=d.sequence;
+      $('export').disabled=false;
+      if(sample.valid){
+        history.push(sample);
+        if(history.length>chartLimit)history.shift();
+        draw();
+      }
     }
     render();
   }};
   $('export').onclick=()=>{
-    const simulated=root.RoverDemo&&root.RoverDemo.enabled;
     let note=simulated?'# 巡检回放；四轮转速与路径同步。':'# 轮速诊断。PWM 为逻辑命令。';
     let columns='time,closed_loop,fault,fault_wheels,sample_ms,rpm1,rpm2,rpm3,rpm4,target1,target2,target3,target4,pwm1,pwm2,pwm3,pwm4';
     if(!simulated){
-      columns+=',return_seen_at,return_boot,return_task,return_state,return_reason,return_points,return_index';
+      columns+=',return_seen_at,return_boot,return_task,return_state,return_reason,return_points,return_index,sequence,feedback_valid,gap_before';
+      if(clipped)note+=' 缓存已满，仅保留最近 '+exportLimit+' 条。';
       const r=root.readReturnObservation?.();
       if(r)note+=' 最近一次收到主控返程状态 '+new Date(r.at).toISOString()+'，启动号 '+r.boot+'，任务 '+r.task+'，'+r.state+(r.reason?'（'+r.reason+'）':'')+'。';
     }
     const lines=[note,columns];
-    for(const p of history){
-      const fields=[new Date(p.at).toISOString(),p.enabled?1:0,p.fault,p.faultWheels,p.sampleMs,...p.rpm,...(p.target||['','','','']),...p.pwm];
+    const oldest=records.length===exportLimit?writeAt:0;
+    for(let i=0;i<records.length;i++){
+      const p=records[(oldest+i)%exportLimit];
+      const fields=[new Date(p.at).toISOString(),p.enabled?1:0,p.fault,p.faultWheels,p.sampleMs,...(p.rpm||['','','','']),...(p.target||['','','','']),...p.pwm];
       if(!simulated){
         const r=p.returnReport;
-        fields.push(...(r?[new Date(r.at).toISOString(),r.boot,r.task,r.state,r.reason,r.points,r.index]:['','','','','','','']));
+        fields.push(...(r?[new Date(r.at).toISOString(),r.boot,r.task,r.state,r.reason,r.points,r.index]:['','','','','','','']),p.sequence,p.valid?1:0,p.gap?1:0);
       }
       lines.push(fields.join(','));
     }

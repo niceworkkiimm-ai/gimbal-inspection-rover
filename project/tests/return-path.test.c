@@ -336,4 +336,68 @@ static void checks_preview_limits(void)
     puts("PASS wheel lag, bounded overshoot, ratio corners and reversals");
 }
 
-int main(void){checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+static float peak_target(void)
+{
+    float peak=0.0f;
+    unsigned i;
+    for(i=0;i<4;i++){
+        float rpm=(float)abs(s.demand[i])*WHEEL_SPEED_MAX_RPM/CAR_MAX_PWM_PERMILLE;
+        if(rpm>peak)peak=rpm;
+    }
+    return peak;
+}
+
+static void check_cruise(int a,int b,int c,int d,int fast)
+{
+    unsigned i;
+    float last=RETURN_APPROACH_RPM;
+    init();
+    for(i=0;i<8;i++)tick(40,a,b,c,d,1,0);
+    start();
+    for(i=0;i<16;i++){
+        float rpm;
+        tick(40,0,0,0,0,1,1);
+        rpm=peak_target();
+        assert(rpm<=last+0.04f*RETURN_CRUISE_RAMP_RPM_S+0.11f);
+        assert(rpm<=RETURN_MAX_RPM && (fast || rpm<=RETURN_APPROACH_RPM));
+        last=rpm;
+    }
+    if(fast)assert(last>RETURN_MAX_RPM-0.11f);
+}
+
+static void checks_cruise_and_stop(void)
+{
+    unsigned i;
+    check_cruise(16,15,16,15,1);
+    check_cruise(-16,-15,-16,-15,1);
+    check_cruise(16,-16,16,-16,0);     /* Spin. */
+    check_cruise(-16,16,16,-16,0);     /* Strafe. */
+    check_cruise(16,6,16,6,0);         /* Tight constant-radius curve. */
+    init();for(i=0;i<40;i++)tick(40,1,1,1,1,1,0);
+    start();
+    for(i=0;i<16;i++){tick(40,0,0,0,0,1,1);assert(peak_target()<=RETURN_APPROACH_RPM);}
+    assert(!s.fast_straight);
+    init();tick(40,-16,16,-16,16,1,0);
+    for(i=0;i<4;i++)tick(40,16,16,16,16,1,0);
+    start();
+    for(i=0;i<16;i++)tick(40,0,0,0,0,1,1);
+    assert(peak_target()>RETURN_APPROACH_RPM);
+    while(s.index>2)tick(40,-16,-16,-16,-16,1,1);
+    tick(40,0,0,0,0,1,1);
+    assert(peak_target()<=RETURN_APPROACH_RPM && !s.fast_straight);
+    tick(40,0,0,0,0,1,0);
+    assert(s.state==RETURN_ABORTED && s.reason==RETURN_MANUAL);zero();
+
+    init();tick(40,16,16,16,16,1,0);start();
+    tick(40,-16,-16,-16,-16,1,1);
+    for(i=0;i<16;i++){
+        tick(40,i%2?1:-1,0,0,0,1,1);
+        assert(s.state==RETURN_RUNNING);zero();
+    }
+    for(i=0;i<9;i++)tick(40,0,0,0,0,1,1);
+    assert(s.state==RETURN_RUNNING);
+    tick(40,0,0,0,0,1,1);assert(s.state==RETURN_DONE);zero();
+    puts("PASS cruise ramp, bidirectional straight, slow spin/strafe/curve, corner approach, takeover and stopped arrival");
+}
+
+int main(void){checks_cruise_and_stop();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}

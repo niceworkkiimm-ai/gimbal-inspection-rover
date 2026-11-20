@@ -54,6 +54,8 @@ void ReturnPath_Command(ReturnPath *s,uint32_t boot,uint32_t request,
     if(memcmp(s->previous,s->point[s->count-1],sizeof(s->previous))&&
        !Save(s,s->previous,now)){s->result=RETURN_NO_PATH;return;}
     if(s->count<2){s->result=RETURN_NO_PATH;return;}
+    s->planned_index=RETURN_CAPACITY;
+    s->speed_limit=RETURN_APPROACH_RPM;
     s->index=(uint16_t)(s->count-2);s->state=RETURN_RUNNING;
     s->segment_ms=s->run_ms=s->lease_ms=now;s->pulse=0;s->settled=0;
 }
@@ -67,37 +69,45 @@ void ReturnPath_Heartbeat(ReturnPath *s,uint32_t boot,uint32_t task,
 }
 /* Compare both adjacent segments in wheel-count space. Normalizing each by
  * its largest wheel displacement makes the check independent of point spacing.
- * A stopped wheel, reversal or a ratio change > 1/4 defines a hard corner. */
-static void GetLookahead(const ReturnPath *s, int32_t advance[4])
+ * A wheel starting/stopping, reversal or a ratio change > 1/4 defines a hard corner. */
+static uint8_t PlanSegment(const ReturnPath *s, uint16_t index, int32_t advance[4])
 {
     int32_t incoming[4], outgoing[4], in_peak=0, out_peak=0, horizon;
     unsigned i;
-    if (!s->index) return;
+    uint8_t straight=1;
+    if (!index) return 0;
     for (i=0; i<4; ++i) {
-        int32_t a=Delta(s->point[s->index][i],s->point[s->index+1][i]);
-        int32_t b=Delta(s->point[s->index-1][i],s->point[s->index][i]);
-        if (Abs(a)>2U*WHEEL_SPEED_CPR || Abs(b)>2U*WHEEL_SPEED_CPR) return;
-        if ((a>0)!=(b>0) || (a<0)!=(b<0)) return;
+        int32_t a=Delta(s->point[index][i],s->point[index+1][i]);
+        int32_t b=Delta(s->point[index-1][i],s->point[index][i]);
+        if (Abs(a)>2U*WHEEL_SPEED_CPR || Abs(b)>2U*WHEEL_SPEED_CPR) return 0;
+        if ((a>0)!=(b>0) || (a<0)!=(b<0)) return 0;
         incoming[i]=a;
         outgoing[i]=b;
         if (Abs(a)>in_peak) in_peak=(int32_t)Abs(a);
         if (Abs(b)>out_peak) out_peak=(int32_t)Abs(b);
     }
-    if (in_peak<=RETURN_TOLERANCE_TICKS || out_peak<=RETURN_TOLERANCE_TICKS) return;
+    if (in_peak<=RETURN_TOLERANCE_TICKS || out_peak<=RETURN_TOLERANCE_TICKS) return 0;
     for (i=0; i<4; ++i) {
         int64_t drift=(int64_t)incoming[i]*out_peak-(int64_t)outgoing[i]*in_peak;
-        if (Abs(drift)*4>(int64_t)in_peak*out_peak) return;
+        if (Abs(drift)*4>(int64_t)in_peak*out_peak) return 0;
+        /* A steady spin or strafe also has collinear wheel vectors. Only
+         * translation with all four wheels rolling together gets cruise speed. */
+        if (Abs(incoming[i])*5<4*in_peak || Abs(outgoing[i])*5<4*out_peak ||
+            (incoming[i]*signs[i]>0)!=(incoming[0]*signs[0]>0)) straight=0;
     }
     horizon=out_peak<RETURN_LOOKAHEAD_TICKS?out_peak:RETURN_LOOKAHEAD_TICKS;
-    for (i=0; i<4; ++i)
-        advance[i]=(int32_t)((int64_t)outgoing[i]*horizon/out_peak)*signs[i];
+    if (advance) {
+        for (i=0; i<4; ++i)
+            advance[i]=(int32_t)((int64_t)outgoing[i]*horizon/out_peak)*signs[i];
+    }
+    return straight && in_peak>=RETURN_CRUISE_MIN_TICKS && out_peak>=RETURN_CRUISE_MIN_TICKS;
 }
 
 void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
                      uint8_t healthy,uint8_t centered_ready){
     uint32_t dt=now-s->last_ms;
     uint8_t i,moved=0,save=0,reversal=0,at_target=1,bad_wheels=0;
-    int32_t error[4],advance[4]={0};int64_t peak=0,d,limit;float rpm;
+    int32_t error[4];int64_t peak=0,d,limit;float rpm;
     Zero(s);
     if(!s->initialized){
         s->initialized=1;s->last_ms=s->changed_ms=now;
@@ -142,34 +152,60 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
     if((uint32_t)(now-s->segment_ms)>8000U||(uint32_t)(now-s->run_ms)>600000U){
         ReturnPath_Abort(s,RETURN_TIMEOUT);return;
     }
-    GetLookahead(s,advance);
+    /* Points are immutable during return. Plan once per index, and require
+     * another straight joint ahead to leave a low-speed segment before a turn. */
+    if(s->planned_index!=s->index){
+        memset(s->advance,0,sizeof(s->advance));
+        s->fast_straight=PlanSegment(s,s->index,s->advance) && s->index>1 &&
+                         PlanSegment(s,(uint16_t)(s->index-1),NULL);
+        s->planned_index=s->index;
+    }
     for(i=0;i<4;i++){
         d=(int64_t)Delta(s->point[s->index][i],counts[i])*signs[i];
         if(Abs(d)>WHEEL_SPEED_CPR*2U){bad_wheels|=(uint8_t)(1U<<i);continue;}
         /* Each wheel must reach this checkpoint in sequence. A wheel that
          * has crossed it may lead only as far as the bounded preview. */
         if (Abs(d)>RETURN_TOLERANCE_TICKS &&
-            (d*advance[i]>=0 || Abs(d)>Abs(advance[i])+RETURN_TOLERANCE_TICKS))
+            (d*s->advance[i]>=0 || Abs(d)>Abs(s->advance[i])+RETURN_TOLERANCE_TICKS))
             at_target=0;
-        error[i]=(int32_t)d+advance[i];
+        error[i]=(int32_t)d+s->advance[i];
         if(Abs(error[i])>peak)peak=Abs(error[i]);
     }
     if(bad_wheels){ReturnPath_CountFault(s,bad_wheels);return;}
     if(at_target){
         if(s->index){s->index--;s->segment_ms=now;s->settled=0;}
         else {
-            if(!s->settled){s->settled=1;s->settled_ms=now;}
+            if(!s->settled || moved){s->settled=1;s->settled_ms=now;}
             if((uint32_t)(now-s->settled_ms)>=400U){s->state=RETURN_DONE;s->reason=RETURN_OK;}
         }
         /* Keep driving toward the preview on this very call. At a hard
          * corner or home the preview is zero and all four outputs stay zero. */
-        if(peak<=RETURN_TOLERANCE_TICKS || s->state!=RETURN_RUNNING)return;
+        if(peak<=RETURN_TOLERANCE_TICKS || s->state!=RETURN_RUNNING){
+            s->speed_limit=RETURN_APPROACH_RPM;
+            return;
+        }
     }
     s->settled=0;
     /* Common scaling preserves the four-wheel proportions through a pass point.
        The inner WheelSpeed PI handles speed feedback, slew and DIR dwell. */
-    rpm=(float)peak*0.55f;if(rpm>RETURN_MAX_RPM)rpm=RETURN_MAX_RPM;
-    if(rpm<3.0f)rpm=3.0f;
+    {
+        uint8_t cruise=(uint8_t)(s->fast_straight && peak>=RETURN_CRUISE_MIN_TICKS);
+        /* If a wheel needs to catch up or correct an overshoot, use the
+         * position approach law until the four travel demands align again. */
+        for(i=0;i<4;i++){
+            if((int64_t)error[i]*s->advance[i]<=0 || Abs(error[i])*2<peak)cruise=0;
+        }
+        if(cruise){
+            s->speed_limit+=RETURN_CRUISE_RAMP_RPM_S*(float)dt/1000.0f;
+            if(s->speed_limit>RETURN_MAX_RPM)s->speed_limit=RETURN_MAX_RPM;
+            rpm=s->speed_limit;
+        }else{
+            s->speed_limit=RETURN_APPROACH_RPM;
+            rpm=(float)peak*0.55f;
+            if(rpm>RETURN_APPROACH_RPM)rpm=RETURN_APPROACH_RPM;
+            if(rpm<3.0f)rpm=3.0f;
+        }
+    }
     for(i=0;i<4;i++){
         float target_rpm;
         if(Abs(error[i])<=RETURN_TOLERANCE_TICKS)continue;

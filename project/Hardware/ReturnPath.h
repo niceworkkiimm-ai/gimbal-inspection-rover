@@ -4,7 +4,10 @@
 #include <stdint.h>
 #define RETURN_CAPACITY 1024U
 #define RETURN_BROWSER_TIMEOUT_MS 1500U
-#define RETURN_MAX_RPM 12.0f
+#define RETURN_MAX_RPM 20.0f
+#define RETURN_APPROACH_RPM 12.0f
+#define RETURN_CRUISE_MIN_TICKS 12 /* short creep segments stay in position control */
+#define RETURN_CRUISE_RAMP_RPM_S 16.0f
 #define RETURN_TOLERANCE_TICKS 3
 #define RETURN_LOOKAHEAD_TICKS 24 /* at most one adjacent segment, about 20 mm at the rim */
 enum { RETURN_IDLE, RETURN_RECORDING, RETURN_RUNNING, RETURN_DONE, RETURN_ABORTED };
@@ -18,7 +21,10 @@ typedef struct {
     uint32_t boot, task, ack, last_ms, changed_ms, saved_ms;
     uint32_t segment_ms, run_ms, settled_ms, lease_ms, pulse;
     uint32_t command_boot, command_task;
-    uint16_t count, index;
+    uint16_t count, index, planned_index;
+    int32_t advance[4];
+    float speed_limit;
+    uint8_t fast_straight;
     uint8_t state, reason, result, command_action;
     uint8_t initialized, ready, settled, stop_requested, count_fault_wheels;
     int8_t travel_sign[4];
