@@ -28,6 +28,11 @@
 #define WHEEL_SPEED_START_GRACE_MS 350U
 #define WHEEL_SPEED_REVERSE_GRACE_MS 350U
 #define WHEEL_SPEED_STALL_MS 800U
+/* Return only. From rest, ramp a temporary PWM floor while waiting for the
+ * first full encoder pulse. Release on movement and stop on feedback timeout. */
+#define RETURN_BREAKAWAY_WAIT_MS 160U
+#define RETURN_BREAKAWAY_RAMP 150.0f /* permille per second */
+#define RETURN_BREAKAWAY_MAX 65.0f   /* maximum contribution as a floor, permille */
 #define WHEEL_SPEED_WRONG_DIRECTION_MS 240U
 #if WHEEL_SPEED_ENABLE != 0 && WHEEL_SPEED_ENABLE != 1
 #error WHEEL_SPEED_ENABLE must be 0 (monitor) or 1 (closed-loop).

@@ -2,6 +2,7 @@
 #define WHEEL_SPEED_H
 #include <stdint.h>
 #include "WheelSpeedConfig.h"
+enum { WHEEL_MONITOR, WHEEL_PI_MANUAL, WHEEL_PI_RETURN };
 enum { WHEEL_FAULT_TIMING=1, WHEEL_FAULT_COUNTS=2,
        WHEEL_FAULT_DIRECTION=4, WHEEL_FAULT_NO_FEEDBACK=8 };
 typedef struct {
@@ -21,5 +22,5 @@ void WheelSpeed_ClearFault(WheelSpeed *s);
  * allowed=0 zeros outputs/integrators immediately but keeps a fault latched.
  */
 void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
-                     const int16_t demand[4],uint8_t enabled,uint8_t allowed);
+                     const int16_t demand[4],uint8_t mode,uint8_t allowed);
 #endif

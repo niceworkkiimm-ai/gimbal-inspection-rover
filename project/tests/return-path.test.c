@@ -1,6 +1,7 @@
 #include "ReturnPath.h"
 #include "ReturnProtocol.h"
 #include "WheelSpeed.h"
+#include "WheelPulse.h"
 #include "CarLogic.h"
 #include "CarConfig.h"
 #include <assert.h>
@@ -165,11 +166,111 @@ static void checks_plant(void){
             d=(int)fraction[i];fraction[i]-=d;counts[i]+=(uint32_t)(d*signs[i]);
         }
         ReturnPath_Step(&s,now,counts,(uint8_t)!w.fault,1);
-        WheelSpeed_Step(&w,now,counts,s.demand,1,(uint8_t)(s.state==RETURN_RUNNING));
+        WheelSpeed_Step(&w,now,counts,s.demand,WHEEL_PI_RETURN,(uint8_t)(s.state==RETURN_RUNNING));
         for(i=0;i<4;i++)assert(fabs(w.target[i])<=RETURN_MAX_RPM+0.001);
     }
     assert(s.state==RETURN_DONE&&!w.fault);
     for(i=0;i<4;i++)assert(abs((int32_t)(counts[i]-s.point[0][i]))<=RETURN_TOLERANCE_TICKS);
     puts("PASS end-to-end position plus speed PI with unequal first-order wheel models");
 }
-int main(void){checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+/* Parked endpoint has just six ticks to unwind. A frictionless model misses
+ * this case: the old controller could sit at 2-3 percent PWM for seconds. */
+static void checks_short_parked_segment(void)
+{
+    WheelSpeed w;
+    uint32_t pulse=0;
+    unsigned i,j;
+    int moved=0;
+    init();tick(40,6,6,6,6,1,0);start();WheelSpeed_Init(&w);
+    for(j=0;j<200 && s.state==RETURN_RUNNING;j++){
+        now+=40;
+        ReturnPath_Heartbeat(&s,s.boot,s.task,++pulse,now);
+        for(i=0;i<4;i++)if(w.output[i]>=52){counts[i]-=(uint32_t)signs[i];moved=1;}
+        ReturnPath_Step(&s,now,counts,!w.fault,1);
+        WheelSpeed_Step(&w,now,counts,s.demand,WHEEL_PI_RETURN,s.state==RETURN_RUNNING);
+    }
+    assert(moved && s.state==RETURN_DONE && !w.fault);
+    for(i=0;i<4;i++)assert(!w.output[i] && abs((int32_t)counts[i])<=RETURN_TOLERANCE_TICKS);
+    puts("PASS short parked endpoint returns with a static-friction threshold");
+}
+
+static void checks_encoder_signal(void)
+{
+    WheelPulse p={0};
+    unsigned i;
+    int direction, step, total=0;
+    uint32_t us=UINT32_MAX-20U;
+    assert(WheelPulse_Edge(&p,0,1,us,10,80)==0);
+    for(direction=-1;direction<=1;direction+=2){
+        for(i=0;i<WHEEL_SPEED_CPR;i++){
+            unsigned b=direction>0;
+            assert(WheelPulse_Edge(&p,1,b,us,10+i,80)==0);
+            step=WheelPulse_Edge(&p,0,!b,us+400,10+i,80);
+            assert(step==direction);
+            total+=step;
+            us+=900;
+        }
+        assert(total==(direction<0?-(int)WHEEL_SPEED_CPR:0));
+    }
+    /* Alternate fixed-B chatter and narrow high pulses with changing B. */
+    for(i=0;i<4;i++){
+        unsigned b=i&1U;
+        uint32_t width=b?20:400;
+        assert(WheelPulse_Edge(&p,1,b,us,1000+i,80)==0);
+        assert(WheelPulse_Edge(&p,0,0,us+width,1000+i,80)==0);
+        assert(WheelPulse_Noisy(&p,1000+i)==(i==3));
+        us+=900;
+    }
+    assert(WheelPulse_Noisy(&p,1123) && !WheelPulse_Noisy(&p,1124));
+    /* Parked with A high for more than one DWT revolution. */
+    assert(WheelPulse_Edge(&p,1,1,100,2000,80)==0);
+    assert(WheelPulse_Edge(&p,0,0,110,30000,80)==1);
+    init();tick(40,16,16,16,16,1,0);start();
+    tick(1,0,0,30,0,1,1);
+    assert(s.state==RETURN_ABORTED && s.reason==RETURN_COUNTS && s.count_fault_wheels==4);
+    zero();park();ReturnPath_Command(&s,s.boot,3,RETURN_SET,0,now);
+    assert(s.count_fault_wheels==0);
+    ReturnPath_CountFault(&s,5);
+    assert(s.state==RETURN_ABORTED && s.reason==RETURN_COUNTS && s.count_fault_wheels==5);
+    init();tick(40,16,16,16,16,1,0);start();
+    s.point[s.index][3]-=WHEEL_SPEED_CPR*3U;
+    tick(40,0,0,0,0,1,1);
+    assert(s.reason==RETURN_COUNTS && s.count_fault_wheels==8);zero();
+    puts("PASS pulse polarity, full revolutions, width, chatter, wrap and retained wheel masks");
+}
+
+static void checks_return_breakaway(void)
+{
+    WheelSpeed w;
+    uint32_t t,c[4]={0};
+    int16_t cmd[4]={0,0,33,0}; /* 3.3 RPM, as at checkpoint 83 in task 5. */
+    int max_effort=0;
+    WheelSpeed_Init(&w);
+    for(t=0;t<=1200;t+=40){
+        WheelSpeed_Step(&w,t,c,cmd,WHEEL_PI_RETURN,1);
+        if(w.output[2]>max_effort)max_effort=w.output[2];
+        if(w.fault)break;
+    }
+    assert(t<=880 && w.fault==WHEEL_FAULT_NO_FEEDBACK && w.fault_wheels==4);
+    assert(max_effort>=52 && max_effort<=(int)RETURN_BREAKAWAY_MAX);
+    assert(!w.output[0] && !w.output[1] && !w.output[2] && !w.output[3]);
+    WheelSpeed_Init(&w);
+    for(t=0;t<=2000;t+=40){
+        WheelSpeed_Step(&w,t,c,cmd,WHEEL_PI_RETURN,1);
+        assert(!w.fault);
+        if(w.output[2]>=52)break; /* Synthetic breakaway threshold. */
+    }
+    assert(t<800);
+    c[2]--;WheelSpeed_Step(&w,t+40,c,cmd,WHEEL_PI_RETURN,1);
+    assert(w.output[2]<52 && !w.fault);
+    cmd[2]=0;WheelSpeed_Step(&w,t+41,c,cmd,WHEEL_PI_RETURN,1);
+    assert(!w.output[2]);
+    WheelSpeed_Init(&w);cmd[2]=33;
+    for(t=0;t<=920;t+=40){
+        WheelSpeed_Step(&w,t,c,cmd,WHEEL_PI_MANUAL,1);
+        assert(w.output[2]<52 && !w.fault);
+    }
+    puts("PASS bounded start assist, release on motion, feedback timeout and manual PI isolation");
+}
+
+int main(void){checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}

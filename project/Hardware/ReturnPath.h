@@ -19,12 +19,13 @@ typedef struct {
     uint32_t command_boot, command_task;
     uint16_t count, index;
     uint8_t state, reason, result, command_action;
-    uint8_t initialized, ready, settled, stop_requested;
+    uint8_t initialized, ready, settled, stop_requested, count_fault_wheels;
     int8_t travel_sign[4];
     int16_t demand[4];
 } ReturnPath;
 void ReturnPath_Init(ReturnPath *s);
 void ReturnPath_Abort(ReturnPath *s, uint8_t reason);
+void ReturnPath_CountFault(ReturnPath *s, uint8_t wheels);
 void ReturnPath_Command(ReturnPath *s,uint32_t boot,uint32_t request,
                         uint8_t action,uint32_t task,uint32_t now);
 void ReturnPath_Heartbeat(ReturnPath *s,uint32_t boot,uint32_t task,

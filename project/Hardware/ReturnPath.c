@@ -16,6 +16,13 @@ void ReturnPath_Abort(ReturnPath *s,uint8_t reason){
         s->state=RETURN_ABORTED;s->reason=reason;s->ready=0;Zero(s);
     }
 }
+void ReturnPath_CountFault(ReturnPath *s, uint8_t wheels)
+{
+    if (wheels && (s->state == RETURN_RECORDING || s->state == RETURN_RUNNING)) {
+        s->count_fault_wheels = wheels;
+        ReturnPath_Abort(s, RETURN_COUNTS);
+    }
+}
 static uint8_t Save(ReturnPath *s,const uint32_t counts[4],uint32_t now){
     if(s->count>=RETURN_CAPACITY){ReturnPath_Abort(s,RETURN_FULL);return 0;}
     memcpy(s->point[s->count++],counts,sizeof(s->previous));s->saved_ms=now;return 1;
@@ -39,7 +46,7 @@ void ReturnPath_Command(ReturnPath *s,uint32_t boot,uint32_t request,
     if(action==RETURN_SET){
         s->count=0;s->index=0;s->task=request;s->state=RETURN_RECORDING;
         memset(s->travel_sign,0,sizeof(s->travel_sign));
-        s->reason=RETURN_OK;s->pulse=0;Save(s,s->previous,now);return;
+        s->count_fault_wheels=0;s->reason=RETURN_OK;s->pulse=0;Save(s,s->previous,now);return;
     }
     if(action!=RETURN_START||task!=s->task){s->result=RETURN_BAD_TASK;return;}
     if(s->state!=RETURN_RECORDING){s->result=RETURN_NO_PATH;return;}
@@ -61,7 +68,7 @@ void ReturnPath_Heartbeat(ReturnPath *s,uint32_t boot,uint32_t task,
 void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
                      uint8_t healthy,uint8_t centered_ready){
     uint32_t dt=now-s->last_ms;
-    uint8_t i,moved=0,save=0,reversal=0,at_target=1;
+    uint8_t i,moved=0,save=0,reversal=0,at_target=1,bad_wheels=0;
     int32_t error[4];int64_t peak=0,d,limit;float rpm;
     Zero(s);
     if(!s->initialized){
@@ -78,13 +85,14 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
     limit=(int64_t)WHEEL_SPEED_CPR*180U*dt/60000U+4;
     for(i=0;i<4;i++){
         d=Delta(counts[i],s->previous[i]);if(d)moved=1;
-        if(Abs(d)>limit)ReturnPath_Abort(s,RETURN_COUNTS);
+        if(Abs(d)>limit)bad_wheels|=(uint8_t)(1U<<i);
         if(s->state==RETURN_RECORDING&&d){
             int8_t sign=d>0?1:-1;
             if(s->travel_sign[i]&&sign!=s->travel_sign[i])reversal=1;
             s->travel_sign[i]=sign;
         }
     }
+    ReturnPath_CountFault(s,bad_wheels);
     if(dt>120U)ReturnPath_Abort(s,RETURN_GAP);
     if(s->state==RETURN_RECORDING&&reversal&&
        memcmp(s->previous,s->point[s->count-1],sizeof(s->previous)))Save(s,s->previous,now);
@@ -108,10 +116,11 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
     }
     for(i=0;i<4;i++){
         d=(int64_t)Delta(s->point[s->index][i],counts[i])*signs[i];
-        if(Abs(d)>WHEEL_SPEED_CPR*2U){ReturnPath_Abort(s,RETURN_COUNTS);return;}
+        if(Abs(d)>WHEEL_SPEED_CPR*2U){bad_wheels|=(uint8_t)(1U<<i);continue;}
         error[i]=(int32_t)d;if(Abs(d)>peak)peak=Abs(d);
         if(Abs(d)>RETURN_TOLERANCE_TICKS)at_target=0;
     }
+    if(bad_wheels){ReturnPath_CountFault(s,bad_wheels);return;}
     if(at_target){
         if(s->index){s->index--;s->segment_ms=now;s->settled=0;}
         else {

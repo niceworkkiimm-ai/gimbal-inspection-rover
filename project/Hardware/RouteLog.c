@@ -34,7 +34,7 @@ void RouteLog_Init(void){
     x=y=h=distance=0;flags=0;
     memset(window_w,0,sizeof(window_w));window_bad=0;
 }
-void RouteLog_Sample(const EncoderFrame *f){
+void RouteLog_Sample(const EncoderFrame *f, uint8_t suspect_wheels){
     uint32_t dt,d;uint8_t i;int64_t ticks;
     float w,dx,dy,da,a,q,bx,by,k,total,residual;
     const float tick_m=3.14159265358979323846f*ROUTE_DIAMETER_MM/(1000.0f*WHEEL_SPEED_CPR);
@@ -42,6 +42,7 @@ void RouteLog_Sample(const EncoderFrame *f){
         initialized=1;sample_at=f->milliseconds;memcpy(counts,f->count,sizeof(counts));
         append(f->milliseconds);return;
     }
+    if(suspect_wheels)window_bad=1;
     dt=f->milliseconds-sample_at;if(dt<40U)return;
     sample_at=f->milliseconds;
     for(i=0;i<4;i++){

@@ -128,7 +128,7 @@ void CarMotor_Init(void)
 void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *data,uint8_t rx_fault)
 {
     uint32_t primask=__get_PRIMASK(),now;
-    uint8_t fresh=0U,ready=0U,allowed,i,centered,was_return,closed_loop;
+    uint8_t fresh=0U,ready=0U,allowed,i,centered,was_return,closed_loop,suspect_wheels;
     uint32_t packet=0U;
     int16_t roll=0,pitch=0;
     int16_t demand[4],output[4];
@@ -189,10 +189,11 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
     /* Encoder sampling uses the existing atomic snapshot. All RPM/PI arithmetic
      * runs outside the interrupt mask; EXTI counting and TIM7 remain serviceable.
      */
-    WheelEncoder_Snapshot(&encoder,0);
+    suspect_wheels=WheelEncoder_Snapshot(&encoder,0);
+    ReturnPath_CountFault(&return_path,suspect_wheels);
     if(mode!=WIRELESS_MODE_CAR)WheelSpeed_ClearFault(&wheel_speed);
     ReturnPath_Step(&return_path,encoder.milliseconds,encoder.count,
-        (uint8_t)(!rx_fault&&!latched_fault&&!wheel_speed.fault),
+        (uint8_t)(!rx_fault&&!latched_fault&&!wheel_speed.fault&&!suspect_wheels),
         (uint8_t)(allowed&&centered&&wheel_speed.valid));
     return_lease_ms=return_path.lease_ms;
     return_active=(uint8_t)(return_path.state==RETURN_RUNNING);
@@ -203,7 +204,7 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
         for(i=0;i<4;i++)demand[i]=0;
     }
     WheelSpeed_Step(&wheel_speed,encoder.milliseconds,encoder.count,demand,
-                    closed_loop,allowed);
+                    return_active?WHEEL_PI_RETURN:closed_loop,allowed);
     for(i=0;i<4;i++)output[i]=closed_loop?wheel_speed.output[i]:demand[i];
 
     __disable_irq();
@@ -247,6 +248,10 @@ void CarMotor_GetWheelSpeed(WheelSpeedFrame *frame,uint32_t sequence)
     uint8_t i,fault=wheel_speed.fault,fault_wheels=wheel_speed.fault_wheels;
     uint32_t primask;
     float value;
+    if(return_path.state==RETURN_ABORTED && return_path.count_fault_wheels){
+        fault|=WHEEL_FAULT_COUNTS;
+        fault_wheels|=return_path.count_fault_wheels;
+    }
     frame->sequence=sequence;frame->milliseconds=wheel_speed.last_ms;
     frame->enabled=wheel_speed.enabled;frame->valid=wheel_speed.valid;
     frame->fault=fault;frame->fault_wheels=fault_wheels;

@@ -26,14 +26,15 @@ static void Zero(WheelSpeed *s,uint32_t now)
 }
 void WheelSpeed_ClearFault(WheelSpeed *s){s->fault=0;s->fault_wheels=0;}
 void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
-                     const int16_t demand[4],uint8_t enabled,uint8_t allowed)
+                     const int16_t demand[4],uint8_t mode,uint8_t allowed)
 {
     uint32_t dt,total_ms=0;
     int32_t ticks[4],target_sign,rpm_sign;
     int64_t magnitude,limit,total;
     uint8_t i,j,new_sample=0;
     float seconds,desired,measured,error,next_i,unsaturated,goal,step;
-    s->enabled=enabled?1:0;
+    const uint8_t enabled=(uint8_t)(mode!=WHEEL_MONITOR);
+    s->enabled=enabled;
     if(!s->initialized){
         s->initialized=1;s->last_ms=now;
         for(i=0;i<4;i++){s->count[i]=counts[i];s->moved_ms[i]=now;}
@@ -96,7 +97,7 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
         s->target[i]=desired*(float)rpm_sign;
         measured=s->rpm[i]*(float)rpm_sign;
         if((uint32_t)(now-s->started_ms[i])>=WHEEL_SPEED_START_GRACE_MS){
-            if(s->output[i]&&Abs((float)s->output[i])>=80.0f&&
+            if((mode==WHEEL_PI_RETURN || (s->output[i]&&Abs((float)s->output[i])>=80.0f))&&
                (uint32_t)(now-s->moved_ms[i])>=WHEEL_SPEED_STALL_MS){
                 s->fault|=WHEEL_FAULT_NO_FEEDBACK;s->fault_wheels|=(uint8_t)(1U<<i);
             }
@@ -115,6 +116,14 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
         goal=Clamp(WHEEL_SPEED_FF*desired+WHEEL_SPEED_KP*error+s->integral[i],0,CAR_MAX_PWM_PERMILLE);
         if(unsaturated>=CAR_MAX_PWM_PERMILLE||goal>=CAR_MAX_PWM_PERMILLE)
             s->limited|=(uint8_t)(1U<<i);
+        if(mode==WHEEL_PI_RETURN && !ticks[i]){
+            uint32_t still_ms=now-s->moved_ms[i];
+            if(still_ms>RETURN_BREAKAWAY_WAIT_MS){
+                float floor=Clamp((still_ms-RETURN_BREAKAWAY_WAIT_MS)*0.001f*
+                                  RETURN_BREAKAWAY_RAMP,0,RETURN_BREAKAWAY_MAX);
+                if(goal<floor)goal=floor;
+            }
+        }
         step=WHEEL_SPEED_OUTPUT_SLEW*seconds;
         s->effort[i]+=Clamp(goal-s->effort[i],-step,step);
         s->output[i]=(int16_t)((int32_t)(s->effort[i]+0.5f)*target_sign);

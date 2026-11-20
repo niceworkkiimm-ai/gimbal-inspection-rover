@@ -1,12 +1,13 @@
 /**
- * 项目迭代: V8.18（倒车返程轮向标定）
+ * 项目迭代: V8.19（四轮编码器脉冲校验与返程低速起步）
+ * 2026-11-20：A 相双边沿与 B 相交叉校验，持续异常记录轮号；返程无计数时限幅起步并超时停车。
  * 2026-11-18：根据手动直行记录标定逻辑 PWM 与实测轮速的方向，返程位置环和轮速环按同一换算控制。
  * 2026-11-17：基于用户提供的初赛一等奖压缩包增加倒车返程；需更新 STM32、基座 V4.12 和网页。
  * 网页设起点/返程/停止，STM32 保存四轮检查点并闭环逆序跟随；不掉头。
  * 返程需手持驾驶模式持续回中及网页心跳；接管、断联、异常计数或轮速故障中止且不续跑。
  * 目标转速上限 12 RPM，仍需架空和短距离实车标定；没有后方障碍传感器。
  * 完整接线沿用下表，USART2 PA2/PA3 基座、UART4 PC10/PC11 气体；无新增接线。
- * 当前版本: 2D/3D网页V8.22；STM32 V8.18、基座ESP V4.12、手持V1.6、ESP32CAM_Camera V1.5
+ * 当前版本: 2D/3D网页V8.23；STM32 V8.19、基座ESP V4.12、手持V1.6、ESP32CAM_Camera V1.5
  * 2026-11-17：摄像头 V1.5 发布已有的 GPIO4 上电补光设置，仅需烧录 ESP32-CAM。
  * 2026-11-11：STM32 区分倾角限幅和停车，串口接收故障停车后可回中恢复。
  * 基座 HTTP 关闭不等待确认，遥测增加 UDP、转发和主控诊断。烧录 STM32 和基座 ESP，按下方接线表。
@@ -455,7 +456,7 @@
 #include "WS2812.h"
 #include <math.h>
 
-#define FIRMWARE_VERSION "V8.18"
+#define FIRMWARE_VERSION "V8.19"
 
 /* ========== HC-SR04 ========== */
 #define TRIG_H()  GPIO_SetBits(GPIOC, GPIO_Pin_0)
@@ -1065,8 +1066,8 @@ int main(void)
                          WirelessControl_ConsumeFault());
         {
             EncoderFrame journal_sample;
-            WheelEncoder_Snapshot(&journal_sample,0);
-            RouteLog_Sample(&journal_sample);
+            uint8_t suspect_wheels = WheelEncoder_Snapshot(&journal_sample,0);
+            RouteLog_Sample(&journal_sample,suspect_wheels);
         }
         if (control_mode != previous_mode)
         {
