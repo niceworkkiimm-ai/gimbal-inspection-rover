@@ -4,7 +4,8 @@
 #include <stdint.h>
 #define RETURN_CAPACITY 1024U
 #define RETURN_BROWSER_TIMEOUT_MS 1500U
-#define RETURN_MAX_RPM 26.0f
+#define RETURN_MAX_RPM 30U
+#define RETURN_TURN_RPM 20U
 #define RETURN_APPROACH_RPM 12.0f
 #define RETURN_CRUISE_MIN_TICKS 12 /* short creep segments stay in position control */
 #define RETURN_CRUISE_RAMP_RPM_S 16.0f
@@ -24,7 +25,7 @@ typedef struct {
     uint16_t count, index, planned_index;
     int32_t advance[4];
     float speed_limit;
-    uint8_t fast_straight;
+    uint8_t cruise_rpm; /* geometry cap; zero selects the position approach law */
     uint8_t state, reason, result, command_action;
     uint8_t initialized, ready, settled, stop_requested, count_fault_wheels;
     int8_t travel_sign[4];

@@ -67,22 +67,44 @@ void ReturnPath_Heartbeat(ReturnPath *s,uint32_t boot,uint32_t task,
         s->pulse=pulse;s->lease_ms=now;
     }
 }
+/* Logical wheel deltas: (left front, right front, left back, right back).
+ * A repeatable wheel vector can represent an arc or a spin as well as a line.
+ * For turning cruise, each side must move coherently, including a parked side. */
+static uint8_t TravelCap(const int32_t v[4],int32_t peak)
+{
+    unsigned i;
+    uint8_t straight=1;
+    for(i=0;i<4;i++){
+        if((v[i]>0)!=(v[0]>0) || Abs(v[i])*5<peak*4)straight=0;
+    }
+    if(straight)return RETURN_MAX_RPM;
+    if(Abs(v[0]-v[2])*4>peak || Abs(v[1]-v[3])*4>peak)return 0;
+    return RETURN_TURN_RPM;
+}
+
 /* Compare both adjacent segments in wheel-count space. Normalizing each by
  * its largest wheel displacement makes the check independent of point spacing.
- * A wheel starting/stopping, reversal or a ratio change > 1/4 defines a hard corner. */
+ * A significant wheel start/stop, reversal or ratio change > 1/4 defines
+ * a hard corner. Ambiguous motion within tick tolerance has no preview. */
 static uint8_t PlanSegment(const ReturnPath *s, uint16_t index, int32_t advance[4])
 {
     int32_t incoming[4], outgoing[4], in_peak=0, out_peak=0, horizon;
     unsigned i;
-    uint8_t straight=1;
+    uint8_t in_cap,out_cap;
     if (!index) return 0;
     for (i=0; i<4; ++i) {
         int32_t a=Delta(s->point[index][i],s->point[index+1][i]);
         int32_t b=Delta(s->point[index-1][i],s->point[index][i]);
         if (Abs(a)>2U*WHEEL_SPEED_CPR || Abs(b)>2U*WHEEL_SPEED_CPR) return 0;
-        if ((a>0)!=(b>0) || (a<0)!=(b<0)) return 0;
-        incoming[i]=a;
-        outgoing[i]=b;
+        /* Near a pivot a stationary inner wheel may record 0, 1 or 2 ticks.
+         * Keep that wheel's exact checkpoint target when its sign is ambiguous.
+         * A significant start, stop or reversal still requires a hard corner. */
+        if ((a>0)!=(b>0) || (a<0)!=(b<0)){
+            if(Abs(a)>RETURN_TOLERANCE_TICKS || Abs(b)>RETURN_TOLERANCE_TICKS)return 0;
+            a=b=0;
+        }
+        incoming[i]=a*signs[i];
+        outgoing[i]=b*signs[i];
         if (Abs(a)>in_peak) in_peak=(int32_t)Abs(a);
         if (Abs(b)>out_peak) out_peak=(int32_t)Abs(b);
     }
@@ -90,24 +112,23 @@ static uint8_t PlanSegment(const ReturnPath *s, uint16_t index, int32_t advance[
     for (i=0; i<4; ++i) {
         int64_t drift=(int64_t)incoming[i]*out_peak-(int64_t)outgoing[i]*in_peak;
         if (Abs(drift)*4>(int64_t)in_peak*out_peak) return 0;
-        /* A steady spin or strafe also has collinear wheel vectors. Only
-         * translation with all four wheels rolling together gets cruise speed. */
-        if (Abs(incoming[i])*5<4*in_peak || Abs(outgoing[i])*5<4*out_peak ||
-            (incoming[i]*signs[i]>0)!=(incoming[0]*signs[0]>0)) straight=0;
     }
     horizon=out_peak<RETURN_LOOKAHEAD_TICKS?out_peak:RETURN_LOOKAHEAD_TICKS;
     if (advance) {
         for (i=0; i<4; ++i)
-            advance[i]=(int32_t)((int64_t)outgoing[i]*horizon/out_peak)*signs[i];
+            advance[i]=(int32_t)((int64_t)outgoing[i]*horizon/out_peak);
     }
-    return straight && in_peak>=RETURN_CRUISE_MIN_TICKS && out_peak>=RETURN_CRUISE_MIN_TICKS;
+    if(in_peak<RETURN_CRUISE_MIN_TICKS || out_peak<RETURN_CRUISE_MIN_TICKS)return 0;
+    in_cap=TravelCap(incoming,in_peak);
+    out_cap=TravelCap(outgoing,out_peak);
+    return in_cap<out_cap?in_cap:out_cap;
 }
 
 void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
                      uint8_t healthy,uint8_t centered_ready){
     uint32_t dt=now-s->last_ms;
     uint8_t i,moved=0,save=0,reversal=0,at_target=1,bad_wheels=0;
-    int32_t error[4];int64_t peak=0,d,limit;float rpm;
+    int32_t error[4],preview_peak=0;int64_t peak=0,d,limit;float rpm;
     Zero(s);
     if(!s->initialized){
         s->initialized=1;s->last_ms=s->changed_ms=now;
@@ -153,11 +174,15 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
         ReturnPath_Abort(s,RETURN_TIMEOUT);return;
     }
     /* Points are immutable during return. Plan once per index, and require
-     * another straight joint ahead to leave a low-speed segment before a turn. */
+     * a compatible joint ahead to leave a low-speed segment before a hard corner. */
     if(s->planned_index!=s->index){
         memset(s->advance,0,sizeof(s->advance));
-        s->fast_straight=PlanSegment(s,s->index,s->advance) && s->index>1 &&
-                         PlanSegment(s,(uint16_t)(s->index-1),NULL);
+        s->cruise_rpm=PlanSegment(s,s->index,s->advance);
+        if(s->cruise_rpm){
+            /* A nonzero cap implies index >= 1, since home has no outgoing leg. */
+            uint8_t ahead=PlanSegment(s,(uint16_t)(s->index-1),NULL);
+            if(ahead<s->cruise_rpm)s->cruise_rpm=ahead;
+        }
         s->planned_index=s->index;
     }
     for(i=0;i<4;i++){
@@ -168,6 +193,7 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
         if (Abs(d)>RETURN_TOLERANCE_TICKS &&
             (d*s->advance[i]>=0 || Abs(d)>Abs(s->advance[i])+RETURN_TOLERANCE_TICKS))
             at_target=0;
+        if(Abs(s->advance[i])>preview_peak)preview_peak=(int32_t)Abs(s->advance[i]);
         error[i]=(int32_t)d+s->advance[i];
         if(Abs(error[i])>peak)peak=Abs(error[i]);
     }
@@ -189,15 +215,19 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
     /* Common scaling preserves the four-wheel proportions through a pass point.
        The inner WheelSpeed PI handles speed feedback, slew and DIR dwell. */
     {
-        uint8_t cruise=(uint8_t)(s->fast_straight && peak>=RETURN_CRUISE_MIN_TICKS);
-        /* If a wheel needs to catch up or correct an overshoot, use the
-         * position approach law until the four travel demands align again. */
-        for(i=0;i<4;i++){
-            if((int64_t)error[i]*s->advance[i]<=0 || Abs(error[i])*2<peak)cruise=0;
+        uint8_t cruise=(uint8_t)(s->cruise_rpm && peak>=RETURN_CRUISE_MIN_TICKS);
+        /* Compare each wheel against its expected share of the segment.
+         * An inner wheel at one third of outer speed is normal on an arc. */
+        for(i=0;i<4 && cruise;i++){
+            int64_t expected=Abs(s->advance[i]);
+            if(expected<=RETURN_TOLERANCE_TICKS && Abs(error[i])<=RETURN_TOLERANCE_TICKS)continue;
+            if(!expected || (int64_t)error[i]*s->advance[i]<=0 ||
+               Abs(error[i])*2*preview_peak<peak*expected ||
+               Abs(error[i])*preview_peak>2*peak*expected)cruise=0;
         }
         if(cruise){
             s->speed_limit+=RETURN_CRUISE_RAMP_RPM_S*(float)dt/1000.0f;
-            if(s->speed_limit>RETURN_MAX_RPM)s->speed_limit=RETURN_MAX_RPM;
+            if(s->speed_limit>s->cruise_rpm)s->speed_limit=(float)s->cruise_rpm;
             rpm=s->speed_limit;
         }else{
             s->speed_limit=RETURN_APPROACH_RPM;

@@ -323,14 +323,20 @@ static void checks_loaded_start(unsigned route)
     int maximum[4]={0};
     init();
     for(i=0;i<18;i++)tick(40,16,15,16,15,1,0);
-    if(route){
+    if(route==2){
+        for(i=0;i<36;i++)tick(40,16,7,16,7,1,0);        /* arc */
+        for(i=0;i<25;i++)tick(40,-16,16,-16,16,1,0);    /* spin */
+        for(i=0;i<24;i++)tick(40,0,16,0,16,1,0);        /* pivot */
+        for(i=0;i<22;i++)tick(40,16,16,16,16,1,0);
+    }else if(route){
         for(i=0;i<8;i++)tick(40,8,-10,8,-10,1,0);
         tick(40,0,0,5,0,1,0); /* isolated M3 correction at parked endpoint */
     }else{
         tick(40,15,13,12,8,1,0); /* asymmetric endpoint as seen on the straight run */
     }
     start();WheelSpeed_Init(&w);
-    for(step=1;step<1600 && s.state==RETURN_RUNNING;step++){
+    for(step=1;step<3000 && s.state==RETURN_RUNNING;step++){
+        uint16_t before=s.index;
         now+=40;
         ReturnPath_Heartbeat(&s,s.boot,s.task,step,now);
         for(i=0;i<4;i++){
@@ -346,6 +352,16 @@ static void checks_loaded_start(unsigned route)
             if(abs(pwm)>maximum[i])maximum[i]=abs(pwm);
         }
         ReturnPath_Step(&s,now,counts,!w.fault,1);
+        if(s.index!=before){
+            assert(s.index+1==before);
+            for(i=0;i<4;i++){
+                int remaining=(int32_t)(s.point[before][i]-counts[i])*signs[i];
+                if(abs(remaining)>RETURN_TOLERANCE_TICKS){
+                    assert(remaining*s.advance[i]<0);
+                    assert(abs(remaining)<=abs(s.advance[i])+RETURN_TOLERANCE_TICKS);
+                }
+            }
+        }
         WheelSpeed_Step(&w,now,counts,s.demand,WHEEL_PI_RETURN,s.state==RETURN_RUNNING);
         if(w.fault)break;
     }
@@ -354,8 +370,8 @@ static void checks_loaded_start(unsigned route)
         assert(maximum[i]>=static_duty[i] && maximum[i]<=CAR_MAX_PWM_PERMILLE);
         assert(!w.output[i] && abs((int32_t)counts[i])<=RETURN_TOLERANCE_TICKS);
     }
-    printf("PASS loaded %s, four distinct breakaway thresholds, settled arrival\n",
-           route?"turn plus single-wheel endpoint":"straight");
+    printf("PASS loaded route %u: %u ms, ordered checkpoints and settled arrival\n",
+           route,(step-1)*40);
 }
 
 static void checks_dense_straight(void)
@@ -432,36 +448,67 @@ static float peak_target(void)
     return peak;
 }
 
-static void check_cruise(int a,int b,int c,int d,int fast)
+static void check_cruise(int a,int b,int c,int d,unsigned cap)
 {
     unsigned i;
     float last=RETURN_APPROACH_RPM;
     init();
     for(i=0;i<8;i++)tick(40,a,b,c,d,1,0);
     start();
-    for(i=0;i<24;i++){
+    for(i=0;i<32;i++){
         float rpm;
         tick(40,0,0,0,0,1,1);
         rpm=peak_target();
         assert(rpm<=last+0.04f*RETURN_CRUISE_RAMP_RPM_S+0.11f);
-        assert(rpm<=RETURN_MAX_RPM && (fast || rpm<=RETURN_APPROACH_RPM));
+        assert(rpm<=cap+0.01f);
         last=rpm;
     }
-    if(fast)assert(last>RETURN_MAX_RPM-0.11f);
+    if(cap>RETURN_APPROACH_RPM)assert(last>cap-0.11f);
+}
+
+static void checks_inner_wheel_and_corner(void)
+{
+    unsigned i;
+    init();
+    for(i=0;i<10;i++)tick(40,16,i%2,16,i%2,1,0);
+    start();
+    for(i=0;i<24;i++)tick(40,0,0,0,0,1,1);
+    assert(s.cruise_rpm==RETURN_TURN_RPM && peak_target()>RETURN_APPROACH_RPM);
+    assert(s.advance[1]==0 && s.advance[3]==0 && !s.demand[1] && !s.demand[3]);
+    /* A parked side drifting outside tolerance must be corrected at approach speed. */
+    tick(40,0,6,0,6,1,1);
+    assert(peak_target()<=RETURN_APPROACH_RPM && s.demand[1] && s.demand[3]);
+
+    init();
+    tick(40,16,-12,16,-12,1,0);
+    for(i=0;i<6;i++)tick(40,16,6,16,6,1,0);
+    start();
+    while(s.index>2)tick(40,-16,-6,-16,-6,1,1);
+    tick(40,0,0,0,0,1,1);
+    assert(!s.cruise_rpm && peak_target()<=RETURN_APPROACH_RPM);
+    tick(40,-16,-6,-16,-6,1,1);assert(s.index==1);
+    tick(40,0,0,0,0,1,1);
+    for(i=0;i<4;i++)assert(!s.advance[i]); /* genuine turn reversal */
+    tick(40,-16,-6,-16,-6,1,1);assert(s.index==0);zero();
+    puts("PASS quantized pivot, drifting parked wheels and exact reverse-turn boundary");
 }
 
 static void checks_cruise_and_stop(void)
 {
     unsigned i;
-    check_cruise(16,15,16,15,1);
-    check_cruise(-16,-15,-16,-15,1);
-    check_cruise(16,-16,16,-16,0);     /* Spin. */
-    check_cruise(-16,16,16,-16,0);     /* Strafe. */
-    check_cruise(16,6,16,6,0);         /* Tight constant-radius curve. */
+    check_cruise(16,15,16,15,RETURN_MAX_RPM);
+    check_cruise(-16,-15,-16,-15,RETURN_MAX_RPM);
+    check_cruise(16,-16,16,-16,RETURN_TURN_RPM);
+    check_cruise(-16,16,-16,16,RETURN_TURN_RPM);
+    check_cruise(-16,16,16,-16,RETURN_APPROACH_RPM); /* Strafe. */
+    check_cruise(16,6,16,6,RETURN_TURN_RPM);
+    check_cruise(-6,-16,-6,-16,RETURN_TURN_RPM);
+    check_cruise(16,0,16,0,RETURN_TURN_RPM); /* Pivot, inner wheels stopped. */
+    check_cruise(16,0,5,0,RETURN_APPROACH_RPM); /* Front/back disagreement. */
     init();for(i=0;i<40;i++)tick(40,1,1,1,1,1,0);
     start();
     for(i=0;i<16;i++){tick(40,0,0,0,0,1,1);assert(peak_target()<=RETURN_APPROACH_RPM);}
-    assert(!s.fast_straight);
+    assert(!s.cruise_rpm);
     init();tick(40,-16,16,-16,16,1,0);
     for(i=0;i<4;i++)tick(40,16,16,16,16,1,0);
     start();
@@ -469,7 +516,7 @@ static void checks_cruise_and_stop(void)
     assert(peak_target()>RETURN_APPROACH_RPM);
     while(s.index>2)tick(40,-16,-16,-16,-16,1,1);
     tick(40,0,0,0,0,1,1);
-    assert(peak_target()<=RETURN_APPROACH_RPM && !s.fast_straight);
+    assert(peak_target()<=RETURN_APPROACH_RPM && !s.cruise_rpm);
     tick(40,0,0,0,0,1,0);
     assert(s.state==RETURN_ABORTED && s.reason==RETURN_MANUAL);zero();
 
@@ -482,7 +529,7 @@ static void checks_cruise_and_stop(void)
     for(i=0;i<9;i++)tick(40,0,0,0,0,1,1);
     assert(s.state==RETURN_RUNNING);
     tick(40,0,0,0,0,1,1);assert(s.state==RETURN_DONE);zero();
-    puts("PASS cruise ramp, bidirectional straight, slow spin/strafe/curve, corner approach, takeover and stopped arrival");
+    puts("PASS cruise ramp, straight/arc/spin/pivot targets, strafe limit, corner approach, takeover and stopped arrival");
 }
 
-int main(void){checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_cruise_and_stop();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+int main(void){checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_loaded_start(2);checks_cruise_and_stop();checks_inner_wheel_and_corner();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
