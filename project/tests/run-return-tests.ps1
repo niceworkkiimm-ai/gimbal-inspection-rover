@@ -10,6 +10,11 @@ $testExe = Join-Path (Resolve-Path $BuildDirectory).Path 'return-path-test.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Host C test build failed' }
 & $testExe
 if ($LASTEXITCODE -ne 0) { throw 'Return controller tests failed' }
+$scanExe = Join-Path (Resolve-Path $BuildDirectory).Path 'scan-echo-test.exe'
+& gcc -std=c99 -Wall -Wextra -Werror -I (Join-Path $projectRoot 'Hardware') (Join-Path $PSScriptRoot 'scan-echo.test.c') -o $scanExe
+if ($LASTEXITCODE -ne 0) { throw 'Scan echo test build failed' }
+& $scanExe
+if ($LASTEXITCODE -ne 0) { throw 'Scan echo tests failed' }
 & node --test (Join-Path $PSScriptRoot 'return-panel.test.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Return browser tests failed' }
 & node (Join-Path $PSScriptRoot 'route-snapshot.test.cjs')

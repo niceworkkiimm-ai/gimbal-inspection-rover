@@ -1,5 +1,5 @@
 /**
- * 项目迭代: V8.25（按轨迹连续巡航倒车返程）
+ * 项目迭代: V8.26（自动扫描定角复测，测距与轮位姿同步）
  * 2026-11-21：去掉按去程耗时限速，连续段按剩余轮程给速；轮向保持时衔接弯道，换向和起点减速。
  * 2026-11-21：记录各段运动耗时，逆序按去程轮速跟随；按剩余轮程提前减速，连续段过点后立即更新目标。
  * 2026-11-20：按四轮位移比例区分连续直线和转向，内外轮按轨迹比例分配速度。
@@ -13,7 +13,7 @@
  * 返程需手持驾驶模式持续回中及网页心跳；接管、断联、异常计数或轮速故障中止且不续跑。
  * 返程巡航上限为直线 72 RPM、连续弯道及转向 54 RPM；位置修正和到站最高 12 RPM。底盘无后向测距。
  * 完整接线沿用下表，USART2 PA2/PA3 基座、UART4 PC10/PC11 气体；无新增接线。
- * 当前版本: 2D/3D网页V8.25；STM32 V8.25、基座ESP V4.12、手持V1.6、ESP32CAM_Camera V1.5
+ * 当前版本: 2D网页V8.25、3D网页V8.26；STM32 V8.26、基座ESP V4.12、手持V1.6、ESP32CAM_Camera V1.5
  * 2026-11-17：摄像头 V1.5 发布已有的 GPIO4 上电补光设置，仅需烧录 ESP32-CAM。
  * 2026-11-11：STM32 区分倾角限幅和停车，串口接收故障停车后可回中恢复。
  * 基座 HTTP 关闭不等待确认，遥测增加 UDP、转发和主控诊断。烧录 STM32 和基座 ESP，按下方接线表。
@@ -458,11 +458,12 @@
 #include "CarMotor.h"
 #include "CarConfig.h"
 #include "WheelEncoder.h"
+#include "ScanEcho.h"
 #include "RouteLog.h"
 #include "WS2812.h"
 #include <math.h>
 
-#define FIRMWARE_VERSION "V8.25"
+#define FIRMWARE_VERSION "V8.26"
 
 /* ========== HC-SR04 ========== */
 #define TRIG_H()  GPIO_SetBits(GPIOC, GPIO_Pin_0)
@@ -1012,7 +1013,14 @@ int main(void)
     uint32_t last_gas_telemetry_cycles = 0;
     uint32_t last_wheel_speed_cycles = 0;
     uint32_t last_scan_step_cycles = 0;
-    uint32_t telemetry_sequence = 0;
+    uint32_t telemetry_sequence = 0, vehicle_sequence = 0, last_encoder_cycles = 0;
+    uint32_t encoder_stamp = 0;
+    uint8_t encoder_sent = 0;
+    ScanEcho echoes = {{0}, 0};
+    uint8_t scan_complete = 0, auto_scan;
+    uint32_t settle_ms = SCAN_SETTLE_MS;
+    EncoderFrame echo_pose;
+    float scan_result = -1.0f;
     uint32_t gas_telemetry_sequence = 0;
     uint32_t wheel_speed_sequence = 0;
     uint8_t gas_telemetry_channel = 0;
@@ -1075,9 +1083,15 @@ int main(void)
             uint8_t suspect_wheels = WheelEncoder_Snapshot(&journal_sample,0);
             RouteLog_Sample(&journal_sample,suspect_wheels);
         }
+        auto_scan = control_mode == WIRELESS_MODE_SCAN_HORIZONTAL ||
+                    control_mode == WIRELESS_MODE_SCAN_VERTICAL ||
+                    control_mode == WIRELESS_MODE_SCAN_ALL;
         if (control_mode != previous_mode)
         {
             previous_mode = control_mode;
+            scan_complete = 0;
+            echoes.count = 0;
+            settle_ms = 400U; /* Moving to the first programmed angle can be a large slew. */
             if (control_mode == WIRELESS_MODE_SCAN_ALL)
                 Voice_Request(VOICE_FILE_SCAN_ALL);
             scan_roll = 0.0f;
@@ -1127,26 +1141,26 @@ int main(void)
         /* === TFT显示角度 === */
 
         /* === 超声波测距：限制触发周期，自动扫描时等待舵机稳定 === */
-        if (Scan_Update(control_mode, &scan_roll, &scan_pitch,
+        if (auto_scan && scan_complete && Scan_Update(control_mode, &scan_roll, &scan_pitch,
                         &scan_direction, &last_scan_step_cycles))
         {
-            S1_Angle = scan_roll;
-            S2_Angle = scan_pitch;
-            S1_Filtered = S1_Angle * 0.6f + S1_Filtered * 0.4f;
-            S2_Filtered = S2_Angle * 0.6f + S2_Filtered * 0.4f;
+            settle_ms = fabsf(scan_pitch - S2_Filtered) > 10.0f ? 400U : SCAN_SETTLE_MS;
+            scan_complete = 0;
+            echoes.count = 0;
+            S1_Angle = S1_Filtered = scan_roll;
+            S2_Angle = S2_Filtered = scan_pitch;
             TIM_SetCompare2(TIM2, AngleToPulse(S1_Filtered));
             TIM_SetCompare2(TIM3, PitchToPulse(S2_Filtered));
-            distance_valid = 0;
-            buzzer_on = 0;
         }
 
         if ((uint32_t)(DWT->CYCCNT - last_sonic_cycles) >=
                 (SystemCoreClock / 1000U) * SONIC_PERIOD_MS &&
-            (control_mode == WIRELESS_MODE_HANDHELD ||
+            (!auto_scan || (!scan_complete &&
              (uint32_t)(DWT->CYCCNT - last_scan_step_cycles) >=
-                (SystemCoreClock / 1000U) * SCAN_SETTLE_MS))
+                (SystemCoreClock / 1000U) * settle_ms)))
         {
             last_sonic_cycles = DWT->CYCCNT;
+            WheelEncoder_Snapshot(&echo_pose, telemetry_sequence + 1U);
             measured_distance = HC_SR04_GetDistance();
 
             if (measured_distance >= 2.0f && measured_distance <= 400.0f)
@@ -1160,6 +1174,24 @@ int main(void)
                 distance_valid = 0;
             }
 
+            if (!auto_scan || ScanEcho_Add(&echoes, distance, &scan_result))
+            {
+                float reading = auto_scan ? scan_result : distance;
+                uint8_t valid = reading >= 2.0f;
+                /* E1(seq+1) must be available for the T(seq) measured at this angle. */
+                if (!encoder_sent || echo_pose.milliseconds != encoder_stamp) {
+                    WirelessControl_SendEncoder(&echo_pose);
+                    telemetry_sequence = echo_pose.sequence;
+                    encoder_stamp = echo_pose.milliseconds;
+                    encoder_sent = 1;
+                    last_encoder_cycles = DWT->CYCCNT;
+                }
+                WirelessControl_SendTelemetry(telemetry_sequence - 1U,
+                    (int16_t)(S1_Filtered * 10.0f), (int16_t)(-S2_Filtered * 10.0f),
+                    valid ? (int16_t)(reading * 10.0f + 0.5f) : -10, valid,
+                    (uint8_t)(link_was_ok || control_mode != WIRELESS_MODE_HANDHELD));
+                scan_complete = auto_scan;
+            }
             /* 显示距离 */
             /* 距离<20cm → 蜂鸣器间歇响 */
             if (distance_valid && distance < 20.0f)
@@ -1181,43 +1213,31 @@ int main(void)
         /* === WS2812灯带：所有控制模式只按障碍物距离显示颜色 === */
         StatusLed_Service(distance_valid, distance);
 
-        /* 每80ms把真实姿态、测距和链路状态回传给底座ESP网页接口。 */
+        /* 车辆与控制诊断独立于扫描采样，每80ms上报。 */
         if ((uint32_t)(DWT->CYCCNT - last_telemetry_cycles) >=
             (SystemCoreClock / 1000U) * 80U)
         {
-            int16_t roll_tenths = 0;
-            int16_t pitch_tenths = 0;
-            int16_t distance_tenths = -10;
             int16_t wheel_pwm[4];
             uint8_t car_state;
             uint32_t uart_faults, service_gap_ms;
-            EncoderFrame encoder;
 
             last_telemetry_cycles = DWT->CYCCNT;
             CarMotor_GetStatus(&car_state, wheel_pwm);
-            WirelessControl_SendVehicle(telemetry_sequence, (uint8_t)control_mode,
+            WirelessControl_SendVehicle(vehicle_sequence++, (uint8_t)control_mode,
                                          car_state, wheel_pwm);
             CarMotor_GetDiagnostics(&uart_faults,&service_gap_ms);
             WirelessControl_SendControlDiagnostics(CarMotor_GetHoldReason(),
                                                    uart_faults,service_gap_ms);
-            if (have_control_packet || control_mode != WIRELESS_MODE_HANDHELD)
-            {
-                /* 网页雷达使用超声波探头的舵机指令角度，而不是手持端原始角度。 */
-                roll_tenths = (int16_t)(S1_Filtered * 10.0f);
-                pitch_tenths = (int16_t)(-S2_Filtered * 10.0f);
-            }
-            if (distance_valid)
-                distance_tenths = (int16_t)(distance * 10.0f);
-
-            WirelessControl_SendTelemetry(telemetry_sequence++,
-                                           roll_tenths,
-                                           pitch_tenths,
-                                           distance_tenths,
-                                           distance_valid,
-                                           (uint8_t)(link_was_ok ||
-                                                     control_mode != WIRELESS_MODE_HANDHELD));
-            WheelEncoder_Snapshot(&encoder,telemetry_sequence);
+        }
+        /* Keep odometry live between confirmed echoes, also during a large servo slew. */
+        if ((uint32_t)(DWT->CYCCNT - last_encoder_cycles) >= (SystemCoreClock / 1000U) * 80U)
+        {
+            EncoderFrame encoder;
+            WheelEncoder_Snapshot(&encoder, ++telemetry_sequence);
             WirelessControl_SendEncoder(&encoder);
+            encoder_stamp = encoder.milliseconds;
+            encoder_sent = 1;
+            last_encoder_cycles = DWT->CYCCNT;
         }
 
         /* S1轮速诊断单独200ms发送，不改变E1/超声波80ms周期。 */

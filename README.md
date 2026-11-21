@@ -1,5 +1,7 @@
 # 体感遥控超声波巡检小车
 
+2026-11-21 晚。STM32 V8.26 自动扫描在同一指令角度采集两次，结果冲突时补测一次，按有效测量上报角度和编码器时刻。三维网页 V8.26 用蓝灰色标记估算高度在地面 ±5 cm 的远距俯扫点。录屏中等待舵机时的空帧和真实无有效回波在旧版界面上表现相同。建议先用水平扫描对准已知距离的平板，再在同一位置俯扫地面，核对断点、角度零位和点位误差。尚待实车复测。
+
 2026-11-21 更新。STM32 V8.25 倒车按轨迹巡航，同向弯道的检查点连续衔接，直线和连续弯道的最高目标轮速分别为 72 和 54 RPM。当前两条实测路线的重建模型均比 V8.24 更快、近停顿更少，落地复测待完成。基座 V4.12，网页 V8.25 按实际距离显示主控有效回波（2–400 cm），无回波留空。[返程使用说明](project/倒车原路返回_使用说明.md)
 
 以 STM32F407ZG 为主控的麦克纳姆轮巡检小车原型，结合二维舵机云台、超声波测距、四合一气体检测和 ESP32-CAM 图传。手持 NodeMCU 通过 Wi-Fi 发送体感或摇杆指令，电脑/手机网页显示扫描点、气体读数和编码器估算路线，支持保存路线及绑定位置的扫描快照。
@@ -12,12 +14,12 @@
 
 | 部分 | 版本 | 正确入口 |
 |---|---|---|
-| STM32 主控 | V8.25 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
+| STM32 主控 | V8.26 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
 | 基座 ESP-01S | V4.12 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.5 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
 | 二维网页 | V8.25 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.25 | `project/gimbal-3d-scan.html` |
+| 三维网页 | V8.26 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
 
