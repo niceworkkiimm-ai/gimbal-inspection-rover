@@ -32,7 +32,7 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
     int32_t ticks[4],target_sign,rpm_sign;
     int64_t magnitude,limit,total;
     uint8_t i,j,new_sample=0;
-    float seconds,desired,measured,error,next_i,unsaturated,pi_goal,goal,step;
+    float seconds,desired,measured,error,next_i,feedforward,unsaturated,pi_goal,goal,step;
     const uint8_t enabled=(uint8_t)(mode!=WHEEL_MONITOR);
     s->enabled=enabled;
     if(!s->initialized){
@@ -92,7 +92,8 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
            (uint32_t)(now-s->zero_ms[i])<CAR_REVERSE_PAUSE_MS)continue;
         if(!s->started[i]){s->started[i]=1;s->started_ms[i]=s->moved_ms[i]=now;s->wrong[i]=0;}
         s->previous_sign[i]=(int8_t)target_sign;
-        desired=Clamp(Abs((float)demand[i])*WHEEL_SPEED_MAX_RPM/CAR_MAX_PWM_PERMILLE,0,WHEEL_SPEED_MAX_RPM);
+        if(mode==WHEEL_PI_RETURN)desired=Clamp(Abs((float)demand[i])*0.1f,0,RETURN_MAX_RPM);
+        else desired=Clamp(Abs((float)demand[i])*WHEEL_SPEED_MAX_RPM/CAR_MAX_PWM_PERMILLE,0,WHEEL_SPEED_MAX_RPM);
         rpm_sign=target_sign*WHEEL_PWM_TO_RPM_SIGN;
         s->target[i]=desired*(float)rpm_sign;
         measured=s->rpm[i]*(float)rpm_sign;
@@ -120,9 +121,14 @@ void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],
         s->breakaway_extra[i]=0;
         next_i=Clamp(s->integral[i]+WHEEL_SPEED_KI*error*seconds,
                      -WHEEL_SPEED_INTEGRAL_LIMIT,WHEEL_SPEED_INTEGRAL_LIMIT);
-        unsaturated=WHEEL_SPEED_FF*desired+WHEEL_SPEED_KP*error+next_i;
+        feedforward=WHEEL_SPEED_FF*desired;
+        /* Keep the validated low-speed law. Above 30 RPM the observed manual
+         * duty/speed leaves less additional duty per RPM on this chassis. */
+        if(mode==WHEEL_PI_RETURN && desired>30.0f)
+            feedforward=WHEEL_SPEED_FF*30.0f+2.6f*(desired-30.0f);
+        unsaturated=feedforward+WHEEL_SPEED_KP*error+next_i;
         if(!((unsaturated>CAR_MAX_PWM_PERMILLE&&error>0)||(unsaturated<0&&error<0)))s->integral[i]=next_i;
-        goal=Clamp(WHEEL_SPEED_FF*desired+WHEEL_SPEED_KP*error+s->integral[i],0,CAR_MAX_PWM_PERMILLE);
+        goal=Clamp(feedforward+WHEEL_SPEED_KP*error+s->integral[i],0,CAR_MAX_PWM_PERMILLE);
         if(unsaturated>=CAR_MAX_PWM_PERMILLE||goal>=CAR_MAX_PWM_PERMILLE)
             s->limited|=(uint8_t)(1U<<i);
         pi_goal=goal;

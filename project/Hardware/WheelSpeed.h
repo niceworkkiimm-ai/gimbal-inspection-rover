@@ -19,7 +19,8 @@ typedef struct {
 void WheelSpeed_Init(WheelSpeed *s);
 void WheelSpeed_ClearFault(WheelSpeed *s);
 /* Call from foreground with interrupts enabled. No allocation, delay or I/O.
- * demand and output use logical PWM polarity. target and rpm use encoder polarity.
+ * Return demand is in tenths of RPM; manual PI demand and output are permille.
+ * Both requests use logical motor polarity. target and rpm use encoder polarity.
  * allowed=0 zeros outputs/integrators immediately but keeps a fault latched.
  */
 void WheelSpeed_Step(WheelSpeed *s,uint32_t now,const uint32_t counts[4],

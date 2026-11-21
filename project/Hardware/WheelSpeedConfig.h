@@ -13,6 +13,7 @@
  * This sign maps between logical motor commands and encoder-signed wheel speed. */
 #define WHEEL_PWM_TO_RPM_SIGN (-1)
 #define WHEEL_SPEED_MAX_RPM 30.0f /* Initial low-speed request cap, NOT guaranteed actual speed. */
+#define RETURN_MAX_RPM 90U /* return demand uses deci-RPM, independently of manual PI */
 #define WHEEL_SPEED_PERIOD_MS 40U
 #define WHEEL_SPEED_MAX_GAP_MS 120U
 #define WHEEL_SPEED_WINDOW 3U

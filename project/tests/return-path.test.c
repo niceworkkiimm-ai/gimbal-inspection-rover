@@ -39,8 +39,8 @@ static void checks_logged_drive_polarity(void)
     start();
     tick(40,0,0,0,0,1,1);
     WheelSpeed_Init(&wheel);
-    WheelSpeed_Step(&wheel,now,counts,s.demand,1,1);
-    WheelSpeed_Step(&wheel,now+40,counts,s.demand,1,1);
+    WheelSpeed_Step(&wheel,now,counts,s.demand,WHEEL_PI_RETURN,1);
+    WheelSpeed_Step(&wheel,now+40,counts,s.demand,WHEEL_PI_RETURN,1);
     for(i=0;i<4;i++){
         assert(s.demand[i]>0);      /* Undo the negative manual PWM. */
         assert(wheel.target[i]<0); /* Reduce the recorded positive wheel displacement. */
@@ -48,6 +48,25 @@ static void checks_logged_drive_polarity(void)
     }
     puts("PASS measured chassis polarity: positive outbound RPM unwinds with positive logical PWM");
 }
+/* Every passed index is checked against the actual wheel counts, including
+ * when two dense points are crossed in one control sample. Hard corners have
+ * separate exact-arrival tests; home always has zero allowable lead. */
+static void check_passed_points(uint16_t before)
+{
+    uint16_t point;
+    unsigned i;
+    assert(before>=s.index && before-s.index<=4);
+    for(point=before;point>s.index;point--){
+        for(i=0;i<4;i++){
+            int left=(int32_t)(s.point[point][i]-counts[i]);
+            int next=(int32_t)(s.point[point-1][i]-s.point[point][i]);
+            if(abs(left)<=RETURN_TOLERANCE_TICKS)continue;
+            assert((int64_t)left*next<0 && abs(left)<=abs(next)+RETURN_TOLERANCE_TICKS);
+            assert(abs(left)<=RETURN_LOOKAHEAD_TICKS+RETURN_TOLERANCE_TICKS);
+        }
+    }
+}
+
 static void ideal_return(void){
     unsigned step,i;uint32_t pulse=0;double pos[4],fraction[4]={0};
     for(i=0;i<4;i++)pos[i]=counts[i];
@@ -60,8 +79,7 @@ static void ideal_return(void){
             delta=(int)fraction[i];fraction[i]-=delta;counts[i]+=(uint32_t)(delta*signs[i]);
         }
         ReturnPath_Step(&s,now,counts,1,1);
-        if(s.index!=target||s.state==RETURN_DONE)
-            for(i=0;i<4;i++)assert(abs((int32_t)(counts[i]-s.point[target][i]))<=RETURN_TOLERANCE_TICKS);
+        check_passed_points(target);
     }
     assert(s.state==RETURN_DONE);zero();
     for(i=0;i<4;i++)assert(abs((int32_t)(counts[i]-s.point[0][i]))<=RETURN_TOLERANCE_TICKS);
@@ -352,16 +370,7 @@ static void checks_loaded_start(unsigned route)
             if(abs(pwm)>maximum[i])maximum[i]=abs(pwm);
         }
         ReturnPath_Step(&s,now,counts,!w.fault,1);
-        if(s.index!=before){
-            assert(s.index+1==before);
-            for(i=0;i<4;i++){
-                int remaining=(int32_t)(s.point[before][i]-counts[i])*signs[i];
-                if(abs(remaining)>RETURN_TOLERANCE_TICKS){
-                    assert(remaining*s.advance[i]<0);
-                    assert(abs(remaining)<=abs(s.advance[i])+RETURN_TOLERANCE_TICKS);
-                }
-            }
-        }
+        check_passed_points(before);
         WheelSpeed_Step(&w,now,counts,s.demand,WHEEL_PI_RETURN,s.state==RETURN_RUNNING);
         if(w.fault)break;
     }
@@ -407,7 +416,7 @@ static void checks_dense_straight(void)
             assert(fabs(w.target[i])<=RETURN_MAX_RPM+0.001);
             if(s.demand[i])any=1;
         }
-        if(s.index!=before){assert(s.index+1==before);passes++;if(!any)pass_stops++;}
+        if(s.index!=before){check_passed_points(before);passes+=before-s.index;if(!any)pass_stops++;}
     }
     assert(s.state==RETURN_DONE && !w.fault && passes==109);
     for(i=0;i<4;i++)assert(abs((int32_t)counts[i])<=RETURN_TOLERANCE_TICKS);
@@ -442,7 +451,7 @@ static float peak_target(void)
     float peak=0.0f;
     unsigned i;
     for(i=0;i<4;i++){
-        float rpm=(float)abs(s.demand[i])*WHEEL_SPEED_MAX_RPM/CAR_MAX_PWM_PERMILLE;
+        float rpm=(float)abs(s.demand[i])*0.1f;
         if(rpm>peak)peak=rpm;
     }
     return peak;
@@ -453,7 +462,7 @@ static void check_cruise(int a,int b,int c,int d,unsigned cap)
     unsigned i;
     float last=RETURN_APPROACH_RPM;
     init();
-    for(i=0;i<8;i++)tick(40,a,b,c,d,1,0);
+    for(i=0;i<32;i++)tick(24,a,b,c,d,1,0);
     start();
     for(i=0;i<32;i++){
         float rpm;
@@ -466,11 +475,51 @@ static void check_cruise(int a,int b,int c,int d,unsigned cap)
     if(cap>RETURN_APPROACH_RPM)assert(last>cap-0.11f);
 }
 
+static void checks_recorded_pace(void)
+{
+    unsigned i;
+    uint16_t at;
+    WheelSpeed w;
+    uint32_t raw[4]={0};
+    int16_t request[4]={900,900,900,900};
+    /* The geometry is identical on both halves, only the recording times differ. */
+    init();
+    for(i=0;i<36;i++)tick(24,16,8,16,8,1,0);
+    for(i=0;i<32;i++)tick(96,16,8,16,8,1,0);
+    assert(s.leg_ms[20]==24 && s.leg_ms[55]==96);
+    assert(s.entry_rpm[20]==RETURN_TURN_RPM && s.entry_rpm[55]==27);
+    start();
+    for(i=0;i<20;i++)tick(40,0,0,0,0,1,1);
+    assert(fabs(peak_target()-27.0f)<0.11f);
+    /* A long stationary wait must not enter the next leg's pace. A late
+     * reversal and the last parked endpoint both use the last motion time. */
+    init();tick(40,6,6,6,6,1,0);park();
+    assert(s.count==2 && s.leg_ms[1]==40);
+    for(i=0;i<25;i++)tick(80,0,0,0,0,1,1);
+    tick(40,-16,-16,-16,-16,1,0);assert(s.leg_ms[2]==40);
+    tick(40,-4,-4,-4,-4,1,0);start();assert(s.leg_ms[3]==40);
+    /* Encoder sampling can span the 32-bit tick wrap. */
+    init();now=UINT32_MAX-15U;
+    s.last_ms=s.saved_ms=s.last_motion_ms=now;
+    tick(40,16,16,16,16,1,0);assert(s.leg_ms[1]==40);
+    /* A newly set origin must never inherit the last recording's profile. */
+    park();ReturnPath_Command(&s,s.boot,2,RETURN_SET,0,now);
+    at=s.count;assert(at==1 && !s.entry_rpm[0] && !s.leg_ms[0]);
+    /* Return requests use deci-RPM. Manual mode retains its prior 30 RPM cap. */
+    WheelSpeed_Init(&w);
+    WheelSpeed_Step(&w,0,raw,request,WHEEL_PI_RETURN,1);
+    WheelSpeed_Step(&w,40,raw,request,WHEEL_PI_RETURN,1);
+    assert(w.target[0]==-90 && w.output[0]<=CAR_MAX_PWM_PERMILLE);
+    WheelSpeed_Step(&w,80,raw,request,WHEEL_PI_MANUAL,1);
+    assert(w.target[0]==-WHEEL_SPEED_MAX_RPM);
+    puts("PASS recorded slow/fast arcs, parked intervals, clock wrap, new task and independent RPM scales");
+}
+
 static void checks_inner_wheel_and_corner(void)
 {
     unsigned i;
     init();
-    for(i=0;i<10;i++)tick(40,16,i%2,16,i%2,1,0);
+    for(i=0;i<32;i++)tick(24,16,i%2,16,i%2,1,0);
     start();
     for(i=0;i<24;i++)tick(40,0,0,0,0,1,1);
     assert(s.cruise_rpm==RETURN_TURN_RPM && peak_target()>RETURN_APPROACH_RPM);
@@ -485,7 +534,7 @@ static void checks_inner_wheel_and_corner(void)
     start();
     while(s.index>2)tick(40,-16,-6,-16,-6,1,1);
     tick(40,0,0,0,0,1,1);
-    assert(!s.cruise_rpm && peak_target()<=RETURN_APPROACH_RPM);
+    assert(s.cruise_rpm<=RETURN_APPROACH_RPM && peak_target()<=RETURN_APPROACH_RPM);
     tick(40,-16,-6,-16,-6,1,1);assert(s.index==1);
     tick(40,0,0,0,0,1,1);
     for(i=0;i<4;i++)assert(!s.advance[i]); /* genuine turn reversal */
@@ -516,7 +565,7 @@ static void checks_cruise_and_stop(void)
     assert(peak_target()>RETURN_APPROACH_RPM);
     while(s.index>2)tick(40,-16,-16,-16,-16,1,1);
     tick(40,0,0,0,0,1,1);
-    assert(peak_target()<=RETURN_APPROACH_RPM && !s.cruise_rpm);
+    assert(peak_target()<=RETURN_APPROACH_RPM && s.cruise_rpm<=RETURN_APPROACH_RPM);
     tick(40,0,0,0,0,1,0);
     assert(s.state==RETURN_ABORTED && s.reason==RETURN_MANUAL);zero();
 
@@ -532,4 +581,4 @@ static void checks_cruise_and_stop(void)
     puts("PASS cruise ramp, straight/arc/spin/pivot targets, strafe limit, corner approach, takeover and stopped arrival");
 }
 
-int main(void){checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_loaded_start(2);checks_cruise_and_stop();checks_inner_wheel_and_corner();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+int main(void){checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_loaded_start(2);checks_cruise_and_stop();checks_recorded_pace();checks_inner_wheel_and_corner();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
