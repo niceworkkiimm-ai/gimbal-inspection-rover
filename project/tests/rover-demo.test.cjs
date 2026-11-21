@@ -10,7 +10,7 @@ check('five deterministic terrains contain distinct, bounded scanner returns',()
   const shapes=new Set();
   s.scans.forEach((scan,i)=>{
     assert.equal(scan.dataSource,'simulation');assert(scan.points.length>=120&&scan.points.length<=800);
-    for(const p of scan.points){assert(p.distance>=2&&p.distance<=150);assert(p.yaw>=-70&&p.yaw<=70);assert(p.pitch>=-32&&p.pitch<=32);}
+    for(const p of scan.points){assert(p.distance>=2&&p.distance<=400);assert(p.yaw>=-70&&p.yaw<=70);assert(p.pitch>=-32&&p.pitch<=32);}
     assert.deepEqual(scan,makeScan(i));shapes.add(JSON.stringify(scan.points));
   });
   assert.equal(shapes.size,5);

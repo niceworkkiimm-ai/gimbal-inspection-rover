@@ -18,7 +18,7 @@ function liveRoute() {
   return route;
 }
 function scan(kind = '2d') {
-  const value = { kind, points: [{ distance: 25, yaw: -30, pitch: 45 }, { distance: 70, yaw: 60, pitch: 90 }] };
+  const value = { kind, points: [{ distance: 25, yaw: -30, pitch: 45 }, { distance: 400, yaw: 60, pitch: 90 }] };
   if (kind === '3d') value.view = { camera: [1, 2, 3], target: [0, 0, 0] };
   return value;
 }
@@ -121,7 +121,7 @@ check('bad imports reject unknown format/version, malformed data and non-finite 
     record => { record.route.scans[0].id = 0; },
     record => { record.route.scans.push(copy(record.route.scans[0])); },
     record => { record.route.scans[0].scan.kind = 'image'; },
-    record => { record.route.scans[0].scan.points[0].distance = 151; },
+    record => { record.route.scans[0].scan.points[0].distance = 400.1; },
     record => { record.route.scans[0].scan.points[0].yaw = -181; },
     record => { record.route.scans[0].scan.points[0].pitch = 181; },
     record => { record.route.scans[0].pose.heading = null; },

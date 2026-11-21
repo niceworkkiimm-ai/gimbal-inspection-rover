@@ -26,7 +26,7 @@
   }
   // Ray intersections in centimetres: x right, y above the sensor, z forward.
   function boxHit(o,d,b) {
-    let lo=0,hi=150;
+    let lo=0,hi=Infinity;
     for(let i=0;i<3;i++) {
       const low=b.center[i]-b.size[i]/2,high=b.center[i]+b.size[i]/2;
       if(Math.abs(d[i])<1e-9){if(o[i]<low||o[i]>high)return Infinity;continue;}
@@ -189,8 +189,8 @@
         const {o,d}=probeRay(yaw,pitch);
         let distance=Infinity;
         for(const b of objects)distance=Math.min(distance,b.type==='box'?boxHit(o,d,b):b.type==='cylinder'?cylinderHit(o,d,b):ellipsoidHit(o,d,b));
-        if(distance>=2&&distance<149.5){
-          distance=clamp(distance+.13*Math.sin(yaw*.7+pitch*.9+index*3),2,149.5);
+        if(distance>=2&&distance<=400){
+          distance=clamp(distance+.13*Math.sin(yaw*.7+pitch*.9+index*3),2,400);
           points.push({distance:Number(distance.toFixed(3)),yaw,pitch});
         }
       }
@@ -289,7 +289,7 @@
           shape.type==='cylinder'?cylinderHit(o,d,shape):ellipsoidHit(o,d,shape);
         distance=Math.min(distance,hit);
       }
-      return {yaw:0,pitch:0,distance:distance<=150?distance:undefined};
+      return {yaw:0,pitch:0,distance:distance<=400?distance:undefined};
     }
     return {duration,samples,scans,phases,checkpoints,bounds,sampleAt,routeAt,plans,objects,readingAt};
   }

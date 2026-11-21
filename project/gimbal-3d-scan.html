@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>三维巡检地图 · V8.24</title>
+  <title>三维巡检地图 · V8.25</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -49,14 +49,14 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.24</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">巡检回放</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.25</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">巡检回放</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">风险判断</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
-      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span id="planLegend" hidden><b class="scan" style="background:#f0b95b"></b>避障路径</span><span><b class="now"></b>40-150 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
+      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span id="planLegend" hidden><b class="scan" style="background:#f0b95b"></b>避障路径</span><span><b class="now"></b>40–400 cm 安全</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
       <aside class="panel side right"><div class="eyebrow">车前已扫描点</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 6000</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
-    <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>车身前向截面</strong><span>横轴：0–150 cm · 相对当前车身</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
-    <footer class="footer"><span>V8.24 · 扫描量程显示 150 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
+    <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>车身前向截面</strong><span>横轴：0–400 cm · 相对当前车身</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
+    <footer class="footer"><span>V8.25 · 有效回波 2–400 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
   </main>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
@@ -65,9 +65,9 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
   <script src="OrbitControls.umd.js?v=8.14"></script>
   <script src="rover-model-data.js?v=8.18"></script>
   <script src="gimbal-model.js?v=8.18"></script>
-  <script src="scan-snapshot.js?v=8.21"></script>
-  <script src="rover-demo.js?v=8.21"></script>
-  <script src="vehicle-route.js?v=8.21"></script>
+  <script src="scan-snapshot.js?v=8.25"></script>
+  <script src="rover-demo.js?v=8.25"></script>
+  <script src="vehicle-route.js?v=8.25"></script>
   <script src="route-log.js?v=8.19"></script>
   <script src="wheel-speed-panel.js?v=8.24"></script>
   <script src="camera-panel.js?v=8.17"></script>
@@ -77,7 +77,7 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
 
     // CAD model and map use one linear scale. Route X is forward and Y is left.
     const UNITS_PER_METER=400, UNITS_PER_CM=4;
-    const DISPLAY_RANGE_CM=150, NEAR_RANGE_CM=60, NEAR_RANGE_RATIO=.8, HEIGHT_RANGE_CM=90;
+    const DISPLAY_RANGE_CM = 400;
     const MAX_POINTS=6000, VOXEL_SIZE=12, POSE_WAIT_MS=1200;
     const simulated=window.RoverDemo.enabled;
     const routeEngine=window.VehicleRoute.engine;
@@ -137,8 +137,8 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     beam.frustumCulled=false;
     current.visible=beam.visible=false;scene.add(current,beam);
 
-    function rangeRatio(distance){const d=Math.max(0,Math.min(DISPLAY_RANGE_CM,distance));return d<=NEAR_RANGE_CM?d/NEAR_RANGE_CM*NEAR_RANGE_RATIO:NEAR_RANGE_RATIO+(d-NEAR_RANGE_CM)/(DISPLAY_RANGE_CM-NEAR_RANGE_CM)*(1-NEAR_RANGE_RATIO);}
-    function heightRatio(height){const sign=height<0?-1:1,value=Math.min(Math.abs(height),HEIGHT_RANGE_CM),ratio=value<=NEAR_RANGE_CM?value/NEAR_RANGE_CM*NEAR_RANGE_RATIO:NEAR_RANGE_RATIO+(value-NEAR_RANGE_CM)/(HEIGHT_RANGE_CM-NEAR_RANGE_CM)*(1-NEAR_RANGE_RATIO);return sign*ratio;}
+    function rangeRatio(distance) { return distance / DISPLAY_RANGE_CM; }
+    function heightRatio(height) { return height / DISPLAY_RANGE_CM; }
     const yawAxis=new THREE.Vector3(0,1,0);
     const worldPosition=pose=>new THREE.Vector3(pose.y*UNITS_PER_METER,0,pose.x*UNITS_PER_METER);
     function localPoint(distance,yaw,pitch){return rover.pointAt(distance*UNITS_PER_CM,yaw,pitch);}
@@ -316,10 +316,10 @@ function updateGas(gases) {
       const L=39,R=15,T=15,B=25,oy=(T+h-B)/2,pw=w-L-R,ph=(h-T-B)/2;
       const x=d=>L+rangeRatio(d)*pw,y=v=>oy-heightRatio(v)*ph;
       pctx.font='11px Segoe UI';pctx.fillStyle='#92a69a';pctx.strokeStyle='#304139';
-      for(const v of [0,20,40,60,100,150]){
+      for(const v of [0,100,200,300,400]){
         pctx.beginPath();pctx.moveTo(x(v),T);pctx.lineTo(x(v),h-B);pctx.stroke();pctx.fillText(v,x(v)-5,h-7);
       }
-      for(const v of [-90,-60,-30,0,30,60,90]){
+      for(const v of [-400,-200,0,200,400]){
         pctx.strokeStyle=v===0?'#4bda9a':'#304139';
         pctx.beginPath();pctx.moveTo(L,y(v));pctx.lineTo(w-R,y(v));pctx.stroke();pctx.fillText(v,3,y(v)+4);
       }
@@ -344,8 +344,8 @@ function updateGas(gases) {
       rover.setWheelSpeed(frame.wheelSpeed,performance.now(),frame.wheelPlaybackRate??1);
       const yaw=Number(frame.roll),pitch=-Number(frame.pitch),distance=Number(frame.distance);
       if(!Number.isFinite(yaw)||!Number.isFinite(pitch))return;
-      const link=frame.link===true,distanceValid=frame.distanceValid===true&&Number.isFinite(distance);
-      const inRange=distanceValid&&distance>=2&&distance<=DISPLAY_RANGE_CM;
+      const link=frame.link===true,distanceValid=frame.distanceValid===true&&Number.isFinite(distance)&&distance>=2&&distance<=DISPLAY_RANGE_CM;
+      const inRange=distanceValid;
       const danger=inRange&&distance<20,caution=inRange&&distance<40;
       Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm:danger,distanceValid,link});
       yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);
@@ -365,9 +365,9 @@ function updateGas(gases) {
         $('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';
         $('height').textContent=link?height.toFixed(1)+' cm':'-- cm';
         $('raw').textContent=[distance.toFixed(1),Math.round(yaw),Math.round(pitch),danger?1:0].join(',');
-        $('status').textContent=!inRange?'范围外':danger?'报警':caution?'注意':'安全';
+        $('status').textContent=danger?'报警':caution?'注意':'安全';
         $('statusDot').className=!inRange?'':danger?'danger':caution?'':'safe';
-        $('sceneReadout').innerHTML=distance.toFixed(1)+' cm<br>'+(!inRange?'仅显示150 cm内':link?angle(yaw)+' / '+angle(pitch):'手持端失联');
+        $('sceneReadout').innerHTML=distance.toFixed(1)+' cm<br>'+(link?angle(yaw)+' / '+angle(pitch):'手持端失联');
       }else{
         $('distance').textContent='--';$('echoText').textContent='未收到有效超声波回波';
         $('echoText').style.color='var(--muted)';$('height').textContent='-- cm';
@@ -463,7 +463,7 @@ function updateGas(gases) {
       const origin=worldPosition(routeEngine);
       const savedPoints=[...mapPoints.values()]
         .map(point=>({point,relative:point.pos.clone().sub(origin)}))
-        .filter(({relative})=>Math.hypot(relative.x,relative.z)<=2*UNITS_PER_METER)
+        .filter(({relative})=>Math.hypot(relative.x,relative.z)<=(DISPLAY_RANGE_CM+40)*UNITS_PER_CM)
         .slice(-800)
         .map(({point,relative})=>({distance:point.distance,yaw:point.yaw,pitch:point.pitch,
           position:relative.applyAxisAngle(yawAxis,-routeEngine.heading).multiplyScalar(1/UNITS_PER_METER).toArray()}));

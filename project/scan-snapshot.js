@@ -12,14 +12,8 @@
     return {forward: distance * Math.cos(angle) - 6.5 * Math.sin(angle),
       height: distance * Math.sin(angle) + 6.5 * (Math.cos(angle) - 1)};
   };
-  const range = distance => {
-    const d = Math.max(0, Math.min(150, distance));
-    return d <= 60 ? d / 60 * .8 : .8 + (d - 60) / 90 * .2;
-  };
-  const heightRange = height => {
-    const h = Math.min(90, Math.abs(height));
-    return Math.sign(height) * (h <= 60 ? h / 60 * .8 : .8 + (h - 60) / 30 * .2);
-  };
+  const range = distance => distance / 400;
+  const heightRange = height => height / 400;
 
   function show2D(host, scan) {
     host.classList.add('snapshot-two');
@@ -33,7 +27,7 @@
       ctx.strokeStyle = '#304139'; ctx.fillStyle = '#93a69c'; ctx.lineWidth = 1;
       const cx = w / 2, cy = h - 32, radius = Math.min(w * .43, h * .76);
       const left = 36, top = 16, bottom = h - 28, oy = (top + bottom) / 2, pw = w - left - 15, ph = (bottom - top) / 2;
-      [0, 20, 40, 60, 100, 150].forEach(distance => {
+      [0, 100, 200, 300, 400].forEach(distance => {
         ctx.beginPath();
         if (!index) {
           const r = range(distance) * radius; ctx.arc(cx, cy, r, Math.PI, 0);
@@ -44,7 +38,7 @@
         }
         ctx.stroke();
       });
-      [-90, -60, -30, 0, 30, 60, 90].forEach(value => {
+      (index ? [-400, -200, 0, 200, 400] : [-90, -60, -30, 0, 30, 60, 90]).forEach(value => {
         ctx.beginPath();
         if (!index) {
           const a = radians(value - 90); ctx.moveTo(cx, cy); ctx.lineTo(cx + radius * Math.cos(a), cy + radius * Math.sin(a));
@@ -91,7 +85,7 @@
       const tint = color(point.distance);
       if (!materials.has(tint)) materials.set(tint, new T.MeshBasicMaterial({color: tint}));
       const mesh = new T.Mesh(geometry, materials.get(tint));
-      const distance = point.distance <= 60 ? point.distance : 60 + (point.distance - 60) / 90 * 40;
+      const distance = point.distance;
       if(point.position)mesh.position.fromArray(point.position).multiplyScalar(400);
       else mesh.position.copy(pointAt(distance * 4, point.yaw, point.pitch));
       scene.add(mesh);
@@ -103,7 +97,7 @@
     const resize = () => {
       const rect = host.getBoundingClientRect(), w = Math.max(1, rect.width), h = Math.max(1, rect.height);
       renderer.setSize(w, h, false); camera.aspect = w / h;
-      if(scan.dataSource==='simulation'||worldSnapshot){
+      if(scan.dataSource==='simulation'||worldSnapshot||scan.points.some(point=>point.distance>150)){
         const center=scanBounds.getCenter(new T.Vector3()),direction=camera.position.clone().sub(controls.target).normalize();
         const right=new T.Vector3().crossVectors(camera.up,direction).normalize(),up=new T.Vector3().crossVectors(direction,right).normalize(),tan=Math.tan(T.MathUtils.degToRad(camera.fov/2));
         let distance=150;
@@ -111,6 +105,7 @@
         distance*=1.1;
         controls.maxDistance=Math.max(1800,distance*1.3);controls.target.copy(center);camera.position.copy(center).addScaledVector(direction,distance);controls.update();
       }
+      camera.far=Math.max(1800,controls.maxDistance+scanBounds.getSize(new T.Vector3()).length());
       camera.updateProjectionMatrix(); render();
     };
     controls.addEventListener('change', render); controls.update();
@@ -157,7 +152,7 @@
       (checkpoint.label?checkpoint.label+' · ':'')+scan.kind.toUpperCase() + ' 扫描快照';
     dialog.querySelector('#scan-snapshot-meta').textContent = new Date(checkpoint.capturedAt).toLocaleString('zh-CN', {hour12: false}) +
       ' · X ' + pose.x.toFixed(2) + ' m · Y ' + pose.y.toFixed(2) + ' m · 航向 ' + (pose.heading * 180 / Math.PI).toFixed(1) + '° · ' + scan.points.length + ' 个扫描点';
-    dialog.querySelector('.snapshot-legend').textContent = '红色 <20 cm · 黄色 20–40 cm · 绿色 40–150 cm · 近距离放大显示。' +
+    dialog.querySelector('.snapshot-legend').textContent = '红色 <20 cm · 黄色 20–40 cm · 绿色 40–400 cm。' +
       (scan.kind === '3d' ? (scan.points.some(p=>p.position)?'图中障碍点保留采集位置。':'')+'拖动旋转，滚轮或双指缩放。' : '') +
       (scan.dataSource==='simulation'?'已保存的地貌扫描点图。':'这是保存时的只读快照。');
     root.dispatchEvent(new CustomEvent('gimbal:snapshot-open'));

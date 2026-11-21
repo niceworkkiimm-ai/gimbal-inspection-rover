@@ -164,7 +164,7 @@
     check(scan&&(scan.kind==='2d'||scan.kind==='3d')&&Array.isArray(scan.points)&&
       scan.points.length>0&&scan.points.length<=MAX_SCAN_POINTS);
     const points=scan.points.map(p=>{
-      check(p&&finite(p.distance,2,150)&&finite(p.yaw,-180,180)&&finite(p.pitch,-180,180));
+      check(p&&finite(p.distance,2,400)&&finite(p.yaw,-180,180)&&finite(p.pitch,-180,180));
       const point={distance:p.distance,yaw:p.yaw,pitch:p.pitch};
       if(p.position!==undefined){
         check(scan.kind==='3d'&&Array.isArray(p.position)&&p.position.length===3&&
