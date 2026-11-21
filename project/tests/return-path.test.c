@@ -57,10 +57,16 @@ static void check_passed_points(uint16_t before)
     unsigned i;
     assert(before>=s.index && before-s.index<=4);
     for(point=before;point>s.index;point--){
+        unsigned off_center=0;
+        for(i=0;i<4;i++)
+            if(abs((int32_t)(s.point[point][i]-counts[i]))>RETURN_TOLERANCE_TICKS)off_center++;
         for(i=0;i<4;i++){
             int left=(int32_t)(s.point[point][i]-counts[i]);
             int next=(int32_t)(s.point[point-1][i]-s.point[point][i]);
+            int prev=(int32_t)(s.point[point][i]-s.point[point+1][i]);
             if(abs(left)<=RETURN_TOLERANCE_TICKS)continue;
+            if(abs(left)<=RETURN_PASS_TICKS &&
+               ((int64_t)prev*next>0 || (off_center==1 && (int64_t)prev*next>=0)))continue;
             assert((int64_t)left*next<0 && abs(left)<=abs(next)+RETURN_TOLERANCE_TICKS);
             assert(abs(left)<=RETURN_LOOKAHEAD_TICKS+RETURN_TOLERANCE_TICKS);
         }
@@ -438,7 +444,8 @@ static void checks_preview_limits(void)
     tick(80,-50,-16,-16,-16,1,1);assert(s.index==1 && s.demand[0]<0);
     /* Even with all wheel signs unchanged, a sharp change of ratios is a corner. */
     init();tick(40,16,4,16,4,1,0);tick(40,16,16,16,16,1,0);start();
-    tick(40,-16,-16,-16,-16,1,1);assert(s.index==0);zero();
+    tick(40,-16,-16,-16,-16,1,1);assert(s.index==0);
+    assert(s.demand[0]>0 && s.demand[2]>0); /* Roll into the changed ratio. */
     /* An actual sign reversal on one pair also requires the exact corner. */
     init();tick(40,16,-16,16,-16,1,0);tick(40,16,16,16,16,1,0);start();
     tick(40,-16,-16,-16,-16,1,1);assert(s.index==0);zero();
@@ -475,7 +482,7 @@ static void check_cruise(int a,int b,int c,int d,unsigned cap)
     if(cap>RETURN_APPROACH_RPM)assert(last>cap-0.11f);
 }
 
-static void checks_recorded_pace(void)
+static void checks_fixed_cruise(void)
 {
     unsigned i;
     uint16_t at;
@@ -486,25 +493,22 @@ static void checks_recorded_pace(void)
     init();
     for(i=0;i<36;i++)tick(24,16,8,16,8,1,0);
     for(i=0;i<32;i++)tick(96,16,8,16,8,1,0);
-    assert(s.leg_ms[20]==24 && s.leg_ms[55]==96);
-    assert(s.entry_rpm[20]==RETURN_TURN_RPM && s.entry_rpm[55]==27);
+    assert(s.entry_rpm[20]==RETURN_TURN_RPM && s.entry_rpm[55]==RETURN_TURN_RPM);
     start();
     for(i=0;i<20;i++)tick(40,0,0,0,0,1,1);
-    assert(fabs(peak_target()-27.0f)<0.11f);
-    /* A long stationary wait must not enter the next leg's pace. A late
-     * reversal and the last parked endpoint both use the last motion time. */
+    assert(fabs(peak_target()-RETURN_TURN_RPM)<0.11f);
     init();tick(40,6,6,6,6,1,0);park();
-    assert(s.count==2 && s.leg_ms[1]==40);
+    assert(s.count==2 && s.point[1][0]==6);
     for(i=0;i<25;i++)tick(80,0,0,0,0,1,1);
-    tick(40,-16,-16,-16,-16,1,0);assert(s.leg_ms[2]==40);
-    tick(40,-4,-4,-4,-4,1,0);start();assert(s.leg_ms[3]==40);
-    /* Encoder sampling can span the 32-bit tick wrap. */
+    assert(s.count==2);
+    tick(40,-16,-16,-16,-16,1,0);
+    tick(40,-4,-4,-4,-4,1,0);start();
+    assert(s.count==4 && s.point[3][0]==counts[0]);
     init();now=UINT32_MAX-15U;
-    s.last_ms=s.saved_ms=s.last_motion_ms=now;
-    tick(40,16,16,16,16,1,0);assert(s.leg_ms[1]==40);
-    /* A newly set origin must never inherit the last recording's profile. */
+    s.last_ms=s.saved_ms=now;
+    tick(40,16,16,16,16,1,0);assert(s.count==2);
     park();ReturnPath_Command(&s,s.boot,2,RETURN_SET,0,now);
-    at=s.count;assert(at==1 && !s.entry_rpm[0] && !s.leg_ms[0]);
+    at=s.count;assert(at==1 && !s.entry_rpm[0]);
     /* Return requests use deci-RPM. Manual mode retains its prior 30 RPM cap. */
     WheelSpeed_Init(&w);
     WheelSpeed_Step(&w,0,raw,request,WHEEL_PI_RETURN,1);
@@ -512,7 +516,25 @@ static void checks_recorded_pace(void)
     assert(w.target[0]==-90 && w.output[0]<=CAR_MAX_PWM_PERMILLE);
     WheelSpeed_Step(&w,80,raw,request,WHEEL_PI_MANUAL,1);
     assert(w.target[0]==-WHEEL_SPEED_MAX_RPM);
-    puts("PASS recorded slow/fast arcs, parked intervals, clock wrap, new task and independent RPM scales");
+    puts("PASS identical cruise for slow/fast outbound arcs, parked intervals, clock wrap, new task and independent RPM scales");
+}
+
+/* Three wheels settled at an intermediate joint, RR still five ticks short.
+ * A larger miss, two lagging wheels, a reversal or home still requires correction. */
+static void checks_single_wheel_residual(void)
+{
+    init();tick(40,16,16,16,16,1,0);tick(40,16,16,16,16,1,0);start();
+    tick(40,-16,-16,-16,-9,1,1);assert(s.index==1);
+    tick(40,0,0,0,-2,1,1);assert(s.index==0);
+    tick(40,-16,-16,-16,-16,1,1);assert(s.demand[3] && !s.settled);
+    tick(40,0,0,0,-5,1,1);assert(s.settled);
+    init();tick(40,16,16,16,16,1,0);tick(40,16,16,16,16,1,0);start();
+    tick(40,-16,-16,-9,-9,1,1);assert(s.index==1);
+    tick(40,0,0,-2,-2,1,1);assert(s.index==0);
+    init();tick(40,16,16,16,-16,1,0);tick(40,16,16,16,16,1,0);start();
+    tick(40,-16,-16,-16,-11,1,1);assert(s.index==1);
+    tick(40,0,0,0,-5,1,1);assert(s.index==0);zero();
+    puts("PASS bounded single-wheel residual, multi-wheel lag, exact reversal and home");
 }
 
 static void checks_inner_wheel_and_corner(void)
@@ -545,8 +567,8 @@ static void checks_inner_wheel_and_corner(void)
 static void checks_cruise_and_stop(void)
 {
     unsigned i;
-    check_cruise(16,15,16,15,RETURN_MAX_RPM);
-    check_cruise(-16,-15,-16,-15,RETURN_MAX_RPM);
+    check_cruise(16,15,16,15,RETURN_STRAIGHT_RPM);
+    check_cruise(-16,-15,-16,-15,RETURN_STRAIGHT_RPM);
     check_cruise(16,-16,16,-16,RETURN_TURN_RPM);
     check_cruise(-16,16,-16,16,RETURN_TURN_RPM);
     check_cruise(-16,16,16,-16,RETURN_APPROACH_RPM); /* Strafe. */
@@ -581,4 +603,4 @@ static void checks_cruise_and_stop(void)
     puts("PASS cruise ramp, straight/arc/spin/pivot targets, strafe limit, corner approach, takeover and stopped arrival");
 }
 
-int main(void){checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_loaded_start(2);checks_cruise_and_stop();checks_recorded_pace();checks_inner_wheel_and_corner();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}
+int main(void){checks_single_wheel_residual();checks_loaded_release();checks_loaded_start(0);checks_loaded_start(1);checks_loaded_start(2);checks_cruise_and_stop();checks_fixed_cruise();checks_inner_wheel_and_corner();checks_dense_straight();checks_preview_limits();checks_short_parked_segment();checks_encoder_signal();checks_return_breakaway();checks_protocol();checks_commands();checks_logged_drive_polarity();checks_paths();checks_faults();checks_pi();checks_plant();puts("All return controller checks passed.");return 0;}

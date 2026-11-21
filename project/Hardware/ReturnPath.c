@@ -24,9 +24,7 @@ void ReturnPath_CountFault(ReturnPath *s, uint8_t wheels)
 }
 static uint8_t PlanSegment(const ReturnPath *s,uint16_t index,int32_t advance[4]);
 static uint8_t Save(ReturnPath *s,const uint32_t counts[4],uint32_t now){
-    uint32_t elapsed=now-s->saved_ms;
     if(s->count>=RETURN_CAPACITY){ReturnPath_Abort(s,RETURN_FULL);return 0;}
-    s->leg_ms[s->count]=!s->count?0:(uint16_t)(elapsed>65535U?65535U:elapsed);
     memcpy(s->point[s->count],counts,sizeof(s->previous));
     s->entry_rpm[s->count++]=0;
     if(s->count>=3){
@@ -55,13 +53,13 @@ void ReturnPath_Command(ReturnPath *s,uint32_t boot,uint32_t request,
     if(action==RETURN_SET){
         s->count=0;s->index=0;s->task=request;s->state=RETURN_RECORDING;
         memset(s->travel_sign,0,sizeof(s->travel_sign));
-        s->last_motion_ms=now;s->count_fault_wheels=0;s->reason=RETURN_OK;s->pulse=0;Save(s,s->previous,now);return;
+        s->count_fault_wheels=0;s->reason=RETURN_OK;s->pulse=0;Save(s,s->previous,now);return;
     }
     if(action!=RETURN_START||task!=s->task){s->result=RETURN_BAD_TASK;return;}
     if(s->state!=RETURN_RECORDING){s->result=RETURN_NO_PATH;return;}
     /* Include the exact parked endpoint, even below the sampling threshold. */
     if(memcmp(s->previous,s->point[s->count-1],sizeof(s->previous))&&
-       !Save(s,s->previous,s->last_motion_ms)){s->result=RETURN_NO_PATH;return;}
+       !Save(s,s->previous,now)){s->result=RETURN_NO_PATH;return;}
     if(s->count<2){s->result=RETURN_NO_PATH;return;}
     s->planned_index=RETURN_CAPACITY;
     s->speed_limit=RETURN_APPROACH_RPM;
@@ -86,23 +84,14 @@ static uint8_t TravelCap(const int32_t v[4],int32_t peak)
     for(i=0;i<4;i++){
         if((v[i]>0)!=(v[0]>0) || Abs(v[i])*5<peak*4)straight=0;
     }
-    if(straight)return RETURN_MAX_RPM;
+    if(straight)return RETURN_STRAIGHT_RPM;
     if(Abs(v[0]-v[2])*4>peak || Abs(v[1]-v[3])*4>peak)return 0;
     return RETURN_TURN_RPM;
 }
 
-static uint8_t RecordedPace(int32_t peak,uint16_t elapsed)
-{
-    uint32_t divisor,rpm;
-    if(!elapsed)return 0;
-    divisor=(uint32_t)elapsed*WHEEL_SPEED_CPR;
-    rpm=((uint32_t)peak*60000U+divisor/2U)/divisor;
-    return (uint8_t)(rpm>RETURN_MAX_RPM?RETURN_MAX_RPM:rpm);
-}
-
 /* Compare both adjacent segments in wheel-count space. Normalizing each by
  * its largest wheel displacement makes the check independent of point spacing.
- * A significant wheel start/stop, reversal or ratio change > 1/4 defines
+ * A significant wheel start/stop, reversal or ratio change beyond 1/4 plus encoder quantization defines
  * a hard corner. Ambiguous motion within tick tolerance has no preview. */
 static uint8_t PlanSegment(const ReturnPath *s, uint16_t index, int32_t advance[4])
 {
@@ -130,23 +119,20 @@ static uint8_t PlanSegment(const ReturnPath *s, uint16_t index, int32_t advance[
     if (in_peak<=RETURN_TOLERANCE_TICKS || out_peak<=RETURN_TOLERANCE_TICKS) return 0;
     for (i=0; i<4; ++i) {
         int64_t drift=(int64_t)incoming[i]*out_peak-(int64_t)outgoing[i]*in_peak;
-        if (Abs(drift)*4>(int64_t)in_peak*out_peak) return 0;
+        /* Comparing two integer wheel ratios can add a tick of rounding on either leg. */
+        if (Abs(drift)*4>(int64_t)in_peak*out_peak+4*(in_peak+out_peak)) return 0;
     }
     horizon=out_peak<RETURN_LOOKAHEAD_TICKS?out_peak:RETURN_LOOKAHEAD_TICKS;
     if (advance) {
         for (i=0; i<4; ++i)
             advance[i]=(int32_t)((int64_t)outgoing[i]*horizon/out_peak);
-        return 0; /* preview only; the pace was cached when the point was saved */
+        return 0; /* preview only; the geometry cap was cached when the point was saved */
     }
     if(in_peak<RETURN_CRUISE_MIN_TICKS || out_peak<RETURN_CRUISE_MIN_TICKS)return 0;
     /* SAVE processes joints in outbound order, so the next reverse joint
      * already has a braking envelope. No full-path pass at start or in an ISR. */
     cap=TravelCap(incoming,in_peak);
     limit=TravelCap(outgoing,out_peak);
-    if(limit<cap)cap=limit;
-    limit=RecordedPace(in_peak,s->leg_ms[index+1]);
-    if(limit<cap)cap=limit;
-    limit=RecordedPace(out_peak,s->leg_ms[index]);
     if(limit<cap)cap=limit;
     exit_rpm=s->entry_rpm[index-1];
     if(!exit_rpm)return cap>RETURN_APPROACH_RPM?(uint8_t)RETURN_APPROACH_RPM:cap;
@@ -163,22 +149,17 @@ static uint8_t PlanSegment(const ReturnPath *s, uint16_t index, int32_t advance[
 static uint8_t MeasureTarget(ReturnPath *s,const uint32_t counts[4],int32_t error[4],
                              int64_t *peak,int32_t *preview_peak)
 {
-    uint8_t i,at_target=1,bad_wheels=0;
+    uint8_t i,at_target=1,bad_wheels=0,off_center=0,small_residual=0;
     int64_t d;
     *peak=0;*preview_peak=0;
     /* Points are immutable during return. Plan once per index, and require
      * a compatible joint ahead to leave a low-speed segment before a hard corner. */
     if(s->planned_index!=s->index){
-        int32_t leg_peak=0;
         for(i=0;i<4;i++){
             int64_t travel=Abs(Delta(s->point[s->index+1][i],s->point[s->index][i]));
             if(travel>2U*WHEEL_SPEED_CPR)bad_wheels|=(uint8_t)(1U<<i);
-            else if(travel>leg_peak)leg_peak=(int32_t)travel;
         }
         if(bad_wheels){ReturnPath_CountFault(s,bad_wheels);return 0;}
-        s->approach_rpm=RecordedPace(leg_peak,s->leg_ms[s->index+1]);
-        if(s->approach_rpm>RETURN_APPROACH_RPM)s->approach_rpm=(uint8_t)RETURN_APPROACH_RPM;
-        if(s->approach_rpm<3)s->approach_rpm=3;
         memset(s->advance,0,sizeof(s->advance));
         PlanSegment(s,s->index,s->advance);
         s->cruise_rpm=s->entry_rpm[s->index];
@@ -189,7 +170,16 @@ static uint8_t MeasureTarget(ReturnPath *s,const uint32_t counts[4],int32_t erro
         if(Abs(d)>WHEEL_SPEED_CPR*2U){bad_wheels|=(uint8_t)(1U<<i);continue;}
         /* Each wheel must reach this checkpoint in sequence. A wheel that
          * has crossed it may lead only as far as the bounded preview. */
-        if (Abs(d)>RETURN_TOLERANCE_TICKS &&
+        if(Abs(d)>RETURN_TOLERANCE_TICKS){
+            ++off_center;
+            if(s->index && Abs(d)<=RETURN_PASS_TICKS){
+                int32_t incoming=Delta(s->point[s->index][i],s->point[s->index+1][i]);
+                int32_t outgoing=Delta(s->point[s->index-1][i],s->point[s->index][i]);
+                /* At a true wheel reversal the extremum itself matters. */
+                small_residual=(uint8_t)((int64_t)incoming*outgoing>=0);
+            }
+        }
+        if (Abs(d)>(s->advance[i]?RETURN_PASS_TICKS:RETURN_TOLERANCE_TICKS) &&
             (d*s->advance[i]>=0 || Abs(d)>Abs(s->advance[i])+RETURN_TOLERANCE_TICKS))
             at_target=0;
         if(Abs(s->advance[i])>*preview_peak)*preview_peak=(int32_t)Abs(s->advance[i]);
@@ -197,7 +187,9 @@ static uint8_t MeasureTarget(ReturnPath *s,const uint32_t counts[4],int32_t erro
         if(Abs(error[i])>*peak)*peak=Abs(error[i]);
     }
     if(bad_wheels)ReturnPath_CountFault(s,bad_wheels);
-    return at_target;
+    /* Avoid stopping three settled wheels to trim a few ticks on the fourth.
+     * The next goal is absolute, so a lag cannot accumulate across checkpoints. */
+    return at_target || (off_center==1 && small_residual);
 }
 
 void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
@@ -229,13 +221,9 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
     }
     ReturnPath_CountFault(s,bad_wheels);
     if(dt>120U)ReturnPath_Abort(s,RETURN_GAP);
-    if(s->state==RETURN_RECORDING && moved){
-        uint8_t resumed=(uint8_t)((uint32_t)(now-s->last_motion_ms)>RETURN_PARK_GAP_MS);
-        if((reversal||resumed) && memcmp(s->previous,s->point[s->count-1],sizeof(s->previous)))
-            Save(s,s->previous,s->last_motion_ms);
-        if(resumed)s->saved_ms=s->last_ms;
-        s->last_motion_ms=now;
-    }
+    if(s->state==RETURN_RECORDING && reversal &&
+       memcmp(s->previous,s->point[s->count-1],sizeof(s->previous)))
+        Save(s,s->previous,s->last_ms);
     if(moved||!centered_ready||!healthy)s->changed_ms=now;
     s->ready=(uint8_t)(healthy&&centered_ready&&s->boot&&
                        (uint32_t)(now-s->changed_ms)>=500U);
@@ -247,7 +235,7 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
         }
         if((uint32_t)(now-s->saved_ms)>=200U&&
            memcmp(counts,s->point[s->count-1],sizeof(s->previous)))save=1;
-        if(save)Save(s,counts,s->last_motion_ms);
+        if(save)Save(s,counts,now);
         return;
     }
     if(s->state!=RETURN_RUNNING)return;
@@ -261,7 +249,16 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
          * each one in sequence, never drive through an unverified turn. */
         if(passed++>=4)return;
         s->index--;s->segment_ms=now;s->settled=0;
-        if(!preview_peak){s->speed_limit=RETURN_APPROACH_RPM;return;}
+        if(!preview_peak){
+            s->speed_limit=RETURN_APPROACH_RPM;
+            /* A speed ratio can change without any wheel reversing. Give the PI
+             * the newly reached leg immediately, preserving its rolling effort. */
+            for(i=0;i<4;i++){
+                int32_t a=Delta(s->point[s->index+1][i],s->point[s->index+2][i]);
+                int32_t b=Delta(s->point[s->index][i],s->point[s->index+1][i]);
+                if((int64_t)a*b<0)return;
+            }
+        }
         at_target=MeasureTarget(s,counts,error,&peak,&preview_peak);
         if(s->state!=RETURN_RUNNING)return;
     }
@@ -293,11 +290,14 @@ void ReturnPath_Step(ReturnPath *s,uint32_t now,const uint32_t counts[4],
         if(cruise){
             s->speed_limit+=RETURN_CRUISE_RAMP_RPM_S*(float)dt/1000.0f;
             if(s->speed_limit>cruise)s->speed_limit=(float)cruise;
-            rpm=s->speed_limit;
+            /* Bound speed by distance to the preview, including when a wheel
+             * is catching up. Avoid demanding full cruise for just a few ticks. */
+            rpm=(float)peak*RETURN_TRACK_RPM_PER_TICK;
+            if(rpm>s->speed_limit)rpm=s->speed_limit;
         }else{
             s->speed_limit=RETURN_APPROACH_RPM;
-            rpm=(float)peak*0.55f;
-            if(rpm>s->approach_rpm)rpm=(float)s->approach_rpm;
+            rpm=(float)peak*(s->index?0.90f:0.55f);
+            if(rpm>RETURN_APPROACH_RPM)rpm=RETURN_APPROACH_RPM;
             if(rpm<3.0f)rpm=3.0f;
         }
     }

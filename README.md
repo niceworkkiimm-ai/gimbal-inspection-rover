@@ -1,6 +1,6 @@
 # 体感遥控超声波巡检小车
 
-2026-11-21 更新。STM32 V8.24 开始记录手动去程各段的运动耗时，倒车时按原顺序反向跟随去程节奏，弯道按内外轮比例控制，接近转折及起点自动减速。上一版实车完成 293 点返程；新版已通过带载模型，实车待测。基座 V4.12，网页 V8.24。[返程使用说明](project/倒车原路返回_使用说明.md)
+2026-11-21 更新。STM32 V8.25 倒车按轨迹巡航，同向弯道的检查点连续衔接，直线和连续弯道的最高目标轮速分别为 72 和 54 RPM。当前两条实测路线的重建模型均比 V8.24 更快、近停顿更少，落地复测待完成。基座 V4.12，网页 V8.24。[返程使用说明](project/倒车原路返回_使用说明.md)
 
 以 STM32F407ZG 为主控的麦克纳姆轮巡检小车原型，结合二维舵机云台、超声波测距、四合一气体检测和 ESP32-CAM 图传。手持 NodeMCU 通过 Wi-Fi 发送体感或摇杆指令，电脑/手机网页显示扫描点、气体读数和编码器估算路线，支持保存路线及绑定位置的扫描快照。
 
@@ -12,12 +12,12 @@
 
 | 部分 | 版本 | 正确入口 |
 |---|---|---|
-| STM32 主控 | V8.16 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
-| 基座 ESP-01S | V4.11 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
+| STM32 主控 | V8.25 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
+| 基座 ESP-01S | V4.12 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.5 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
-| 二维网页 | V8.18 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.21 | `project/gimbal-3d-scan.html` |
+| 二维网页 | V8.24 | `project/gimbal-radar-standalone.html` |
+| 三维网页 | V8.24 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
 
