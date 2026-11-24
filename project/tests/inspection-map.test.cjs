@@ -47,3 +47,60 @@ assert.equal(parseRouteFile(JSON.stringify(file)).gasMarks,undefined);
 e.reset();assert.equal(e.gasMarks.length,0);
 console.log('PASS wall bands, multiple heights, doorway, floor, isolated points, pose and depth boundaries');
 console.log('PASS gas availability, alarm priority, stationary recovery, stale positions, JSON and legacy files');
+
+// Stagger every other sweep. Remove beams, add bounded range noise and an isolated spike.
+function measured(yaw,pitch,z=1) {
+  const x=z*Math.tan(yaw*Math.PI/180),d=Math.hypot(x,z);
+  return {x,y:.34+d*Math.tan(pitch*Math.PI/180),z,yaw,pitch,distance:100*d,station:'fixed'};
+}
+const sparse=[],spike=measured(0,0,2.1);
+for(const pitch of [-10,-5,0,5,10]){
+  for(let i=-12;i<=12;i++){
+    const yaw=2*i+(pitch%10===0?0:1);
+    if((i+2*pitch)%13===4)continue;
+    sparse.push(yaw===0&&pitch===0?spike:measured(yaw,pitch,1+.008*Math.sin(i*1.7+pitch)));
+  }
+}
+const joined=build(sparse);
+assert(!joined.covered.has(spike));assert(joined.covered.size>=sparse.length*.88);
+assert(joined.vertices.every((v,i)=>i%3!==2||Math.abs(v-1)<.012));
+function containsXZHeight(mesh,x,y){
+  // Cast a ray through the wall at a known horizontal position and height.
+  const v=mesh.vertices;
+  for(let i=0;i<v.length;i+=9){
+    const [ax,ay,,bx,by,,cx,cy]=v.slice(i,i+9);
+    const cross=(px,py,qx,qy)=>px*qy-py*qx;
+    const d=cross(bx-ax,by-ay,cx-ax,cy-ay);if(Math.abs(d)<1e-10)continue;
+    const u=cross(x-ax,y-ay,cx-ax,cy-ay)/d,w=cross(bx-ax,by-ay,x-ax,y-ay)/d;
+    if(u>=-1e-6&&w>=-1e-6&&u+w<=1.000001)return true;
+  }
+  return false;
+}
+for(let x=-.32;x<=.32;x+=.04)for(let h=.2;h<=.48;h+=.025)
+  assert(containsXZHeight(joined,x,h),'hole inside supported noisy wall '+[x,h]);
+assert.deepEqual(build([...sparse].reverse()).vertices,joined.vertices);
+const edgesAt=(pitch,depth)=>Array.from({length:21},(_,i)=>measured((i-10)*2,pitch,depth));
+const below=edgesAt(0,1),above=edgesAt(10,1);
+assert(containsXZHeight(build([...below,...above]),0,.42));
+const blocked=build([...below,measured(0,5,1.5),...above]);
+assert(!containsXZHeight(blocked,0,.42));assert(containsXZHeight(blocked,.15,.42));
+assert(!containsXZHeight(build([...below,...edgesAt(15,1)]),0,.42));
+const opening=sparse.filter(p=>Math.abs(p.yaw)>7);
+assert(!containsXZHeight(build(opening),0,.31));
+const stepped=[...edgesAt(0,1),...edgesAt(5,1)].map(p=>p.yaw>=0?measured(p.yaw,p.pitch,1.3):p);
+const stepSurface=build(stepped);
+for(let i=0;i<stepSurface.vertices.length;i+=9){
+ const z=[2,5,8].map(k=>stepSurface.vertices[i+k]);
+ assert(Math.max(...z)-Math.min(...z)<.02,'rectangle spans a depth step');
+}
+// Two planar returns meeting at a real convex corner must retain the kink.
+const corner=[...edgesAt(0,1),...edgesAt(5,1)].map(p=>{
+ const slope=p.yaw<0?-.75:.75;
+ return measured(p.yaw,p.pitch,1/(1-slope*Math.tan(p.yaw*Math.PI/180)));
+});
+const bent=build(corner);assert(bent.panels>0);
+for(let i=0;i<bent.vertices.length;i+=3){
+ const x=bent.vertices[i],z=bent.vertices[i+2];
+ assert(Math.abs(z-(1+.75*Math.abs(x)))<.015);
+}
+console.log('PASS staggered noisy wall coverage, spike rejection, door and corner, missing row and depth veto');

@@ -97,7 +97,7 @@
     function add(point,pos,station){
       pos.toArray(positions,positions.length);new T.Color(color(point.distance)).toArray(tints,tints.length);
       scanBounds.expandByPoint(pos);fitPoints.push(pos);
-      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,station});
+      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,distance:point.distance,station});
     }
     function addScan(saved,pose,station){
       for(const p of saved.points){
