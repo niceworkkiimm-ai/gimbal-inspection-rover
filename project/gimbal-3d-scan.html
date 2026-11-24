@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>三维巡检地图 · V8.28</title>
+  <title>三维巡检地图 · V8.29</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -45,18 +45,22 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
 .corner{padding:5px 8px;border-radius:4px;background:#0b1320cc}
 .gas-card,.target{border-radius:5px}.raw{background:#0d1622}.bar{background:#0b1320}
 @media(max-width:680px){.scene-head{align-items:flex-start;flex-direction:column}.scene-tools{justify-content:flex-start}.scene-panel{min-height:520px;padding:12px}h1{font-size:19px}}
-</style>
+    .sonar-options{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 18px;font-size:12px;color:var(--muted)}
+    .sonar-options select,.sonar-options input{color:var(--text);background:#162331;border:1px solid var(--line);border-radius:4px;padding:3px}
+    .sonar-options input{width:50px}.sonar-options summary{cursor:pointer}.sonar-options p{margin:5px 0}
+    #angleInputs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:5px}#projectionStatus{font-size:12px;color:#b6cadc}
+  </style>
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.28</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">巡检回放</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.29</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">巡检回放</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
-      <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">前向测距</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">扫描姿态</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
-      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="wallsToggle" class="btn btn-compact" type="button" aria-pressed="true">墙面估算：开</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div id="wallStatus" style="font-size:12px;color:#b8c8d8">等待连续墙面回波</div><div id="routeGasAlert" role="status" hidden></div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span>沿线气体 · 绿正常 / 黄预警 / 红报警 / 紫故障 / 灰未知</span><span id="planLegend" hidden><b class="scan" style="background:#f0b95b"></b>避障路径</span><span><b style="background:#87aac7"></b>估算近地回波（±5 cm）</span><span><b class="now"></b>40–400 cm</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
+      <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">前向测距</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">舵机指令角</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
+      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="wallsToggle" class="btn btn-compact" type="button" aria-pressed="true">墙面估算：开</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div class="sonar-options"><label>回波定位 <select id="echoMode"><option value="auto">自动估算</option><option value="front">本站正对平墙</option><option value="raw">原始射线点</option></select></label><details id="angleSetup"><summary>舵机角度标定</summary><p>用量角器测量两轴指令为 −30°、+30° 时的实际角度。水平向车体左侧、俯仰向上为正。</p><div id="angleInputs"></div><button id="applyAngles" type="button" class="btn btn-compact">应用标定</button><button id="resetAngles" type="button" class="btn btn-compact">恢复标称角</button><span id="angleResult" role="status"></span></details></div><div id="projectionStatus" role="status"></div><div id="wallStatus" style="font-size:12px;color:#b8c8d8">等待连续墙面回波</div><div id="routeGasAlert" role="status" hidden></div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span>沿线气体 · 绿正常 / 黄预警 / 红报警 / 紫故障 / 灰未知</span><span id="planLegend" hidden><b class="scan" style="background:#f0b95b"></b>避障路径</span><span><b style="background:#87aac7"></b>估算近地回波（±5 cm）</span><span><b class="now"></b>40–400 cm</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
       <aside class="panel side right"><div class="eyebrow">车前已扫描点</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 6000</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
     <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>车身前向截面</strong><span>横轴：0–400 cm · 相对当前车身</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
-    <footer class="footer"><span>V8.28 · 有效回波 2–400 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
+    <footer class="footer"><span>V8.29 · 有效回波 2–400 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
   </main>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
@@ -66,10 +70,11 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
   <script src="rover-model-data.js?v=8.18"></script>
   <script src="gimbal-model.js?v=8.18"></script>
   <script src="route-gas.js?v=8.27"></script>
+  <script src="sonar-projection.js?v=8.29"></script>
   <script src="scan-walls.js?v=8.28"></script>
-  <script src="scan-snapshot.js?v=8.28"></script>
+  <script src="scan-snapshot.js?v=8.29"></script>
   <script src="rover-demo.js?v=8.27"></script>
-  <script src="vehicle-route.js?v=8.27"></script>
+  <script src="vehicle-route.js?v=8.29"></script>
   <script src="route-log.js?v=8.19"></script>
   <script src="wheel-speed-panel.js?v=8.24"></script>
   <script src="camera-panel.js?v=8.17"></script>
@@ -83,6 +88,18 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     const MAX_POINTS=6000, VOXEL_SIZE=12, POSE_WAIT_MS=1200;
     const simulated=window.RoverDemo.enabled;
     const routeEngine=window.VehicleRoute.engine;
+    let calibration=SonarProjection.nominal.slice(),frontStation=null,frontPose=null,showSurface=true;
+    if(!simulated)try{
+      const saved=JSON.parse(localStorage.getItem('sonar-servo-angles-v1'));
+      if(SonarProjection.validCalibration(saved))calibration=saved;
+    }catch(_){}
+    const angleFields=['水平 −30°','水平 +30°','俯仰 −30°','俯仰 +30°'].map((name,i)=>{
+      const label=document.createElement('label'),input=document.createElement('input');
+      input.type='number';input.step='.1';input.value=calibration[i];label.append(name+' ',input);
+      $('angleInputs').append(label);return input;
+    });
+    $('angleSetup').hidden=simulated;
+    const measured=(yaw,pitch)=>simulated?{yaw,pitch}:SonarProjection.angles(yaw,pitch,calibration);
     const rover=GimbalModel.create(THREE);
     const {machine,yawAssembly,pitchAssembly}=rover;
     const state={distance:0,yaw:0,pitch:0,alarm:false,distanceValid:false,link:false};
@@ -126,28 +143,75 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     const walls=ScanWalls.layer(THREE,UNITS_PER_METER);
     scene.add(walls.mesh);
     let wallsDirty=false,lastWallBuild=-Infinity,wallSummary='等待连续墙面回波';
+    function referenced(p){
+      return frontStation!==null&&p.station===frontStation&&frontPose&&
+        Math.hypot(p.pose.x-frontPose.x,p.pose.y-frontPose.y)<=.035&&
+        Math.cos(p.pose.heading-frontPose.heading)>=Math.cos(3*Math.PI/180);
+    }
     function wallSamples(){
       return Array.from(mapPoints.values(),p=>({x:p.pos.x/UNITS_PER_METER,y:p.pos.y/UNITS_PER_METER,
-        z:p.pos.z/UNITS_PER_METER,yaw:p.yaw,pitch:p.pitch,distance:p.distance,station:p.station}));
+        z:p.pos.z/UNITS_PER_METER,yaw:p.yaw,pitch:p.pitch,distance:p.distance,station:p.station,
+        head:p.pose.heading,commands:[p.cmdYaw,p.cmdPitch],...(referenced(p)?{frontWall:true}:{})}));
     }
     function rebuildWalls(){
-      const samples=wallSamples(),result=walls.update(samples),remaining=[];
+      const samples=wallSamples(),raw=$('echoMode').value==='raw';
+      const located=SonarProjection.resolve(samples,{raw:raw||simulated});
+      const eligible=located.display.filter(p=>!located.uncertain.has(p));
+      walls.mesh.visible=showSurface&&!raw;
+      const result=walls.update(walls.mesh.visible?eligible:[]),remaining=[];
       let i=0;
-      for(const p of mapPoints.values())if(!result.covered.has(samples[i++]))remaining.push(p.slot);
+      for(const p of mapPoints.values()){
+        const v=located.display[i++];
+        scanPositionAttr.setXYZ(p.slot,v.x*UNITS_PER_METER,v.y*UNITS_PER_METER,v.z*UNITS_PER_METER);
+        if(!located.uncertain.has(v)&&!result.covered.has(v))remaining.push(p.slot);
+      }
+      scanPositionAttr.needsUpdate=true;
       wallPointIndex.array.set(remaining);wallPointIndex.needsUpdate=true;
       scanGeometry.setIndex(wallPointIndex);scanGeometry.setDrawRange(0,remaining.length);
       wallsDirty=false;
       wallSummary=result.panels?'已拟合多层墙面 · 石纹为示意材质':result.bands?
         '已拟合水平轮廓 · 全扫描可补充墙面高度':'等待连续墙面回波';
-      $('wallStatus').textContent=wallSummary;
-    }
-    $('wallsToggle').onclick=()=>{
-      walls.mesh.visible=!walls.mesh.visible;
+      $('wallStatus').textContent=walls.mesh.visible?wallSummary:(raw?'原始中心射线点':'仅显示定位点');
+      const note=simulated?'模拟回波':frontStation!==null?'平墙参考已锁定在选定站位':
+        (samples.length?'按标定射线定位':'等待扫描');
+      $('projectionStatus').textContent=raw?'按实测距离和标定后的中心射线画点':[
+        located.corrected?'平墙估算 '+located.corrected+' 点':note,
+        located.uncertain.size?'等距回波方向未定 '+located.uncertain.size+' 点，可切换原始射线查看':''
+      ].filter(Boolean).join(' · ');
+      $('wallsToggle').disabled=raw;
       $('wallsToggle').setAttribute('aria-pressed',String(walls.mesh.visible));
       $('wallsToggle').textContent='墙面估算：'+(walls.mesh.visible?'开':'关');
-      if(walls.mesh.visible)rebuildWalls();
-      else {scanGeometry.setIndex(null);scanGeometry.setDrawRange(0,mapPoints.size);$('wallStatus').textContent='仅显示原始扫描点';}
+    }
+    $('wallsToggle').onclick=()=>{showSurface=!showSurface;rebuildWalls();};
+    function stationKey(pose){
+      return [routeEngine.restarts,routeEngine.gaps,Math.round(pose.x*10),Math.round(pose.y*10),
+        Math.round(pose.heading*12)].join(',');
+    }
+    $('echoMode').onchange=()=>{
+      if($('echoMode').value==='front'&&(simulated||!routeReady(Date.now())||Math.abs(routeEngine.speed)>.025||Date.now()-routeEngine.poseReceivedAt>1200)){
+        $('echoMode').value='auto';frontStation=null;rebuildWalls();
+        $('projectionStatus').textContent='停车并等待实时位姿同步后，再选择本站正对平墙。';return;
+      }
+      if($('echoMode').value==='front'){
+        frontStation=stationKey(routeEngine);frontPose={x:routeEngine.x,y:routeEngine.y,heading:routeEngine.heading};
+      }
+      if($('echoMode').value==='auto')frontStation=null;
+      rebuildWalls();
     };
+    function setAngles(values){
+      if(!SonarProjection.validCalibration(values)){
+        $('angleResult').textContent='请输入有效角度，每轴两端跨度须为 12° 至 120°。';return;
+      }
+      calibration=values.slice();angleFields.forEach((field,i)=>field.value=values[i]);
+      let saved=true;try{localStorage.setItem('sonar-servo-angles-v1',JSON.stringify(values));}catch(_){saved=false;}
+      for(const p of mapPoints.values()){
+        Object.assign(p,measured(p.cmdYaw,p.cmdPitch));p.pos=worldPoint(p,p.pose);
+        tintPoint(p);
+      }
+      rebuildWalls();$('angleResult').textContent=saved?'已保存，当前点云已重算。':'已应用于当前页面。';
+    }
+    $('applyAngles').onclick=()=>setAngles(angleFields.map(field=>field.valueAsNumber));
+    $('resetAngles').onclick=()=>setAngles(SonarProjection.nominal);
     const gasDots=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({
       vertexColors:true,size:7,sizeAttenuation:false,depthTest:false}));
     gasDots.renderOrder=3;gasDots.name='route-gas-observations';scene.add(gasDots);
@@ -182,6 +246,7 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     function clock(){return new Date().toLocaleTimeString('zh-CN',{hour12:false});}
     const distanceColor=distance=>distance<20?0xff6d6d:distance<40?0xf0b95b:0x4bda9a;
     function showBeam(frame,pose){
+      frame={...frame,...measured(frame.yaw,frame.pitch)};
       const origin=worldPoint({...frame,distance:0},pose);
       const hit=worldPoint(frame,pose);
       beamAt=Date.now();current.visible=beam.visible=true;
@@ -196,25 +261,30 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
       $('pointCount').textContent=mapPoints.size+' / '+MAX_POINTS;
       $('pointFill').style.width=mapPoints.size/MAX_POINTS*100+'%';
     }
+    function tintPoint(p){
+      const floor=p.pitch<0&&Math.abs(p.pos.y)<=5*UNITS_PER_CM&&p.distance>=40;
+      new THREE.Color(floor?0x87aac7:distanceColor(p.distance)).toArray(scanColors,p.slot*3);
+      scanColorAttr.needsUpdate=true;
+    }
     function addPoint(frame,pose){
-      const pos=worldPoint(frame,pose);
+      const nominalPos=worldPoint(frame,pose),orientation=measured(frame.yaw,frame.pitch);
+      const pos=worldPoint({...frame,...orientation},pose);
       // A 3 cm voxel can erase several neighbouring beams on a close wall.
       const voxel=frame.distance<80?VOXEL_SIZE/3:VOXEL_SIZE;
-      const cell=voxel+':'+pos.toArray().map(n=>Math.floor(n/voxel)).join(',');
+      const cell=voxel+':'+nominalPos.toArray().map(n=>Math.floor(n/voxel)).join(',');
       if(mapPoints.has(cell))return;
       const slot=nextSlot;
       if(slots[slot]!==undefined)mapPoints.delete(slots[slot]);
       slots[slot]=cell;nextSlot=(slot+1)%MAX_POINTS;
-      const station=[routeEngine.restarts,routeEngine.gaps,Math.round(pose.x*10),Math.round(pose.y*10),
-        Math.round(pose.heading*12)].join(',');
-      mapPoints.set(cell,{distance:frame.distance,yaw:frame.yaw,pitch:frame.pitch,pos,station,slot});
-      wallsDirty=true;
-      pos.toArray(scanPositions,slot*3);
-      const nearFloor=frame.pitch<0 && Math.abs(pos.y)<=5*UNITS_PER_CM && frame.distance>=40;
-      new THREE.Color(nearFloor?0x87aac7:distanceColor(frame.distance)).toArray(scanColors,slot*3);
+      const point={...orientation,distance:frame.distance,cmdYaw:frame.yaw,cmdPitch:frame.pitch,
+        pose:{x:pose.x,y:pose.y,heading:pose.heading},pos,station:stationKey(pose),slot};
+      mapPoints.set(cell,point);wallsDirty=true;
+      pos.toArray(scanPositions,slot*3);tintPoint(point);
       updateCloud();
     }
     function clearPointCloud(){
+      frontStation=null;if($('echoMode').value==='front')$('echoMode').value='auto';
+      $('projectionStatus').textContent='等待扫描';
       mapPoints.clear();slots.length=0;nextSlot=0;pendingScans.length=0;latestScan=null;
       scanGeometry.setIndex(null);walls.update([]);wallsDirty=false;wallSummary='等待连续墙面回波';
       if(walls.mesh.visible)$('wallStatus').textContent=wallSummary;
@@ -378,7 +448,8 @@ function updateGas(gases) {
         pctx.fillStyle='#'+distanceColor(point.distance).toString(16);pctx.fill();
       }
       if(!state.distanceValid||!state.link||state.distance>DISPLAY_RANGE_CM)return;
-      const currentPoint=localPoint(state.distance,state.yaw,state.pitch);
+      const actual=measured(state.yaw,state.pitch);
+      const currentPoint=localPoint(state.distance,actual.yaw,actual.pitch);
       const origin=localPoint(0,0,0);
       const endX=x((currentPoint.z-origin.z)/UNITS_PER_CM);
       const endY=y((currentPoint.y-origin.y)/UNITS_PER_CM);
@@ -398,8 +469,9 @@ function updateGas(gases) {
       const inRange=distanceValid;
       const danger=inRange&&distance<20,caution=inRange&&distance<40;
       Object.assign(state,{distance:distanceValid?distance:0,yaw,pitch,alarm:danger,distanceValid,link});
-      yawAssembly.rotation.y=THREE.MathUtils.degToRad(yaw);
-      pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(pitch);
+      const actual=measured(yaw,pitch);
+      yawAssembly.rotation.y=THREE.MathUtils.degToRad(actual.yaw);
+      pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(actual.pitch);
       if(!inRange||!link)current.visible=beam.visible=false;
       else if(simulated||!routeEngine.config.confirmed)showBeam(state,activeRoute);
       else if(!paused){
@@ -410,7 +482,7 @@ function updateGas(gases) {
       $('pitch').textContent=link?angle(pitch):'-- deg';
       $('update').textContent='更新于 '+clock()+' · 主控数据年龄 '+(Number.isFinite(frame.ageMs)?frame.ageMs+' ms':'--');
       if(distanceValid){
-        const height=(localPoint(distance,yaw,pitch).y-localPoint(0,0,0).y)/UNITS_PER_CM;
+        const height=(localPoint(distance,actual.yaw,actual.pitch).y-localPoint(0,0,0).y)/UNITS_PER_CM;
         $('distance').textContent=distance.toFixed(1);
         $('echoText').textContent='HC-SR04 回波有效';$('echoText').style.color='var(--green)';
         $('height').textContent=link?height.toFixed(1)+' cm':'-- cm';
@@ -440,7 +512,7 @@ function updateGas(gases) {
     }
     function animate(now){
       requestAnimationFrame(animate);
-      if(walls.mesh.visible&&wallsDirty&&now-lastWallBuild>=600){rebuildWalls();lastWallBuild=now;}
+      if(wallsDirty&&now-lastWallBuild>=600){rebuildWalls();lastWallBuild=now;}
       const elapsed=lastAnimation===null?0:Math.min(50,now-lastAnimation);
       lastAnimation=now;rover.advanceWheels(now);
       const step=snapPose?1:1-Math.exp(-elapsed/105);
@@ -517,7 +589,8 @@ function updateGas(gases) {
         .filter(({relative})=>Math.hypot(relative.x,relative.z)<=(DISPLAY_RANGE_CM+40)*UNITS_PER_CM)
         .slice(-800)
         .map(({point,relative})=>({distance:point.distance,yaw:point.yaw,pitch:point.pitch,
-          station:point.station,position:relative.applyAxisAngle(yawAxis,-routeEngine.heading).multiplyScalar(1/UNITS_PER_METER).toArray()}));
+          station:point.station,head:Math.atan2(Math.sin(point.pose.heading-routeEngine.heading),Math.cos(point.pose.heading-routeEngine.heading)),
+          commands:[point.cmdYaw,point.cmdPitch],...(referenced(point)?{frontWall:true}:{}),position:relative.applyAxisAngle(yawAxis,-routeEngine.heading).multiplyScalar(1/UNITS_PER_METER).toArray()}));
       if(!savedPoints.length)throw Error('当前位置附近没有可保存的点，请停车扫描并等待地图更新。');
       return {kind:'3d',points:savedPoints};
     }

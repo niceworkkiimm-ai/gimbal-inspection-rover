@@ -72,7 +72,7 @@
     g.setAttribute('color',new T.Float32BufferAttribute(colors,3));
     return g;
   }
-  function show3D(host, scan,route) {
+  function show3D(host, scan,route,scanHeading) {
     const T = root.THREE;
     if (!T || !T.OrbitControls || !root.GimbalModel || typeof root.GimbalModel.create !== 'function')
       throw Error('三维回看组件未加载，请保留同目录的 three.min.js、OrbitControls.umd.js、rover-model-data.js 和 gimbal-model.js。');
@@ -94,20 +94,29 @@
     const {min,max}=scanBounds;
     for(const x of [min.x,max.x])for(const y of [min.y,max.y])for(const z of [min.z,max.z])fitPoints.push(new T.Vector3(x,y,z));
     const positions=[],tints=[],samples=[];
-    function add(point,pos,station){
+    function add(point,pos,station,head){
       pos.toArray(positions,positions.length);new T.Color(color(point.distance)).toArray(tints,tints.length);
       scanBounds.expandByPoint(pos);fitPoints.push(pos);
-      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,distance:point.distance,station});
+      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,distance:point.distance,station,head,frontWall:point.frontWall});
     }
     function addScan(saved,pose,station){
       for(const p of saved.points){
         const pos=p.position?new T.Vector3(...p.position).multiplyScalar(400):pointAt(p.distance*4,p.yaw,p.pitch);
         if(pose)pos.applyAxisAngle(new T.Vector3(0,1,0),pose.heading).add(new T.Vector3(pose.y*400,0,pose.x*400));
-        add(p,pos,p.station||station);
+        const heading=pose?.heading||0;
+        const oldStation=p.station?.split(',').map(Number);
+        // Legacy positioned snapshots are already in the capture vehicle's coordinate frame.
+        let head=Number.isFinite(p.head)?p.head+heading:(!p.position?heading:undefined);
+        if(head===undefined&&oldStation?.length===5)head=oldStation[4]/12-(pose?0:scanHeading);
+        add(p,pos,p.station||station,head);
       }
     }
     if(route){
-      if(route.worldCloud)for(const p of route.worldCloud)add(p,new T.Vector3(p.x,p.y,p.z).multiplyScalar(400),p.station);
+      if(route.worldCloud)for(const p of route.worldCloud){
+        const parts=p.station.split(',');
+        const head=Number.isFinite(p.head)?p.head:parts.length===5?Number(parts[4])/12:undefined;
+        add(p,new T.Vector3(p.x,p.y,p.z).multiplyScalar(400),p.station,head);
+      }
       else for(const checkpoint of route.scans||[])if(checkpoint.scan.kind==='3d')
         addScan(checkpoint.scan,checkpoint.pose,'scan'+checkpoint.id);
       const line=[];
@@ -126,11 +135,32 @@
     cloud.setAttribute('position',new T.Float32BufferAttribute(positions,3));
     cloud.setAttribute('color',new T.Float32BufferAttribute(tints,3));
     scene.add(new T.Points(cloud,new T.PointsMaterial({size:4,vertexColors:true,sizeAttenuation:false})));
-    const walls=root.ScanWalls.layer(T,400),wallResult=walls.update(samples);
-    const remaining=[];samples.forEach((p,i)=>{if(!wallResult.covered.has(p))remaining.push(i);});
-    cloud.setIndex(remaining);scene.add(walls.mesh);
+    const walls=root.ScanWalls.layer(T,400);scene.add(walls.mesh);
     const worldSnapshot=route||scan.points.some(point=>point.position);
     const render = () => renderer.render(scene, camera);
+    const selector=host.parentNode.querySelector('.echo-view');
+    const info=host.parentNode.querySelector('.echo-info');
+    const singleSite=samples.length&&samples.every(p=>Number.isFinite(p.head)&&p.station===samples[0].station)&&
+      (route||scan).dataSource!=='simulation';
+    if(singleSite)selector.add(new Option('本站正对平墙','front'));
+    const drawIndex=new T.BufferAttribute(new Uint32Array(samples.length),1);
+    cloud.setIndex(drawIndex);
+    function paintEchoes(){
+      const raw=selector.value==='raw',input=selector.value==='front'?samples.map(p=>({...p,frontWall:true})):samples;
+      const projection=root.SonarProjection.resolve(input,{
+        raw:raw||(route||scan).dataSource==='simulation'});
+      const result=walls.update(raw?[]:projection.display.filter(p=>!projection.uncertain.has(p)));
+      const remaining=[],attr=cloud.getAttribute('position');
+      projection.display.forEach((p,i)=>{
+        attr.setXYZ(i,p.x*400,p.y*400,p.z*400);
+        if(!result.covered.has(p)&&!projection.uncertain.has(p))remaining.push(i);
+      });
+      attr.needsUpdate=true;drawIndex.array.set(remaining);drawIndex.needsUpdate=true;
+      cloud.setDrawRange(0,remaining.length);cloud.computeBoundingSphere();
+      info.textContent=raw?'原始距离沿中心射线显示':'平墙估算 '+projection.corrected+' 点 · 方向未定 '+projection.uncertain.size+' 点';
+      render();
+    }
+    selector.onchange=paintEchoes;paintEchoes();
     const resize = () => {
       const rect = host.getBoundingClientRect(), w = Math.max(1, rect.width), h = Math.max(1, rect.height);
       renderer.setSize(w, h, false); camera.aspect = w / h;
@@ -184,7 +214,8 @@
       #scan-snapshot-viewer .snapshot-two canvas{width:100%;height:100%;min-height:0;flex:1}
       #scan-snapshot-viewer .snapshot-legend{font-size:12px}
       @media(max-width:600px){#scan-snapshot-viewer{padding:13px}#scan-snapshot-viewer .snapshot-two{grid-template-columns:1fr;height:65vh;min-height:430px}#scan-snapshot-viewer h2{font-size:16px}}
-    </style><header><h2 id="scan-snapshot-title"></h2><button type="button" autofocus>关闭</button></header><p id="scan-snapshot-meta"></p><div class="snapshot-view"></div><p class="snapshot-legend"></p>`;
+    </style><header><h2 id="scan-snapshot-title"></h2><button type="button" autofocus>关闭</button></header><p id="scan-snapshot-meta"></p><label class="echo-controls">回波定位 <select class="echo-view"><option value="auto">自动估算</option><option value="raw">原始射线点</option></select> <span class="echo-info"></span></label><div class="snapshot-view"></div><p class="snapshot-legend"></p>`;
+    dialog.querySelector('.echo-controls').hidden=scan.kind!=='3d';
     const pose = checkpoint.pose;
     dialog.querySelector('h2').textContent = '路线点 #' + checkpoint.id + ' · ' +
       (checkpoint.label?checkpoint.label+' · ':'')+scan.kind.toUpperCase() + ' 扫描快照';
@@ -208,7 +239,7 @@
     const close = () => { dialog.close(); finish(); };
     dismiss = close; dialog.querySelector('button').addEventListener('click', close); dialog.addEventListener('close', finish, {once: true});
     document.body.append(dialog); dialog.showModal();
-    try { destroy = scan.kind === '3d' ? show3D(dialog.querySelector('.snapshot-view'), scan,route) : show2D(dialog.querySelector('.snapshot-view'), scan); }
+    try { destroy = scan.kind === '3d' ? show3D(dialog.querySelector('.snapshot-view'), scan,route,pose.heading) : show2D(dialog.querySelector('.snapshot-view'), scan); }
     catch (error) { close(); throw error; }
     return dialog;
   }

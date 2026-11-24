@@ -162,13 +162,30 @@
   const MAX_SCANS=100,MAX_SCAN_POINTS=800;
   const finite=(v,low,high)=>typeof v==='number'&&Number.isFinite(v)&&v>=low&&v<=high;
   const validStation=s=>typeof s==='string' && /^[0-9,:-]{1,80}$/.test(s);
+  function sonarFields(p){
+    const fields={};
+    if(p.head!==undefined){
+      if(!finite(p.head,-Math.PI-.001,Math.PI+.001))throw Error('扫描时车头方向无效。');
+      fields.head=p.head;
+    }
+    if(p.commands!==undefined){
+      if(!Array.isArray(p.commands)||p.commands.length!==2||!p.commands.every(a=>finite(a,-3276.8,3276.7)))
+        throw Error('扫描舵机指令无效。');
+      fields.commands=p.commands.slice();
+    }
+    if(p.frontWall!==undefined){
+      if(typeof p.frontWall!=='boolean')throw Error('平墙标记无效。');
+      fields.frontWall=p.frontWall;
+    }
+    return fields;
+  }
   function cleanCloud(points){
     if(!Array.isArray(points)||points.length>6000)throw Error('整程点云数量无效。');
     return points.map(p=>{
       if(!p||!finite(p.x,-1e6,1e6)||!finite(p.y,-10,10)||!finite(p.z,-1e6,1e6)||
         !finite(p.pitch,-180,180)||!finite(p.yaw,-180,180)||!finite(p.distance,2,400)||!validStation(p.station))
         throw Error('整程点云格式无效。');
-      return {x:p.x,y:p.y,z:p.z,yaw:p.yaw,pitch:p.pitch,distance:p.distance,station:p.station};
+      return {x:p.x,y:p.y,z:p.z,yaw:p.yaw,pitch:p.pitch,distance:p.distance,station:p.station,...sonarFields(p)};
     });
   }
   function cleanScan(scan){
@@ -177,7 +194,7 @@
       scan.points.length>0&&scan.points.length<=MAX_SCAN_POINTS);
     const points=scan.points.map(p=>{
       check(p&&finite(p.distance,2,400)&&finite(p.yaw,-180,180)&&finite(p.pitch,-180,180));
-      const point={distance:p.distance,yaw:p.yaw,pitch:p.pitch};
+      const point={distance:p.distance,yaw:p.yaw,pitch:p.pitch,...sonarFields(p)};
       if(p.station!==undefined){check(validStation(p.station));point.station=p.station;}
       if(p.position!==undefined){
         check(scan.kind==='3d'&&Array.isArray(p.position)&&p.position.length===3&&
