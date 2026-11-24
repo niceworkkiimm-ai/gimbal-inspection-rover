@@ -15,6 +15,13 @@ $scanExe = Join-Path (Resolve-Path $BuildDirectory).Path 'scan-echo-test.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Scan echo test build failed' }
 & $scanExe
 if ($LASTEXITCODE -ne 0) { throw 'Scan echo tests failed' }
+$strafeExe = Join-Path (Resolve-Path $BuildDirectory).Path 'strafe-test.exe'
+& gcc -std=c99 -Wall -Wextra -Werror -I (Join-Path $projectRoot 'Hardware') (Join-Path $PSScriptRoot 'strafe.test.c') (Join-Path $projectRoot 'Hardware/CarLogic.c') -o $strafeExe
+if ($LASTEXITCODE -ne 0) { throw 'Strafe test build failed' }
+& $strafeExe
+if ($LASTEXITCODE -ne 0) { throw 'Strafe regression failed' }
+& node (Join-Path $PSScriptRoot 'parked-scan.test.cjs')
+if ($LASTEXITCODE -ne 0) { throw 'Parked scan regression failed' }
 & node --test (Join-Path $PSScriptRoot 'return-panel.test.cjs')
 if ($LASTEXITCODE -ne 0) { throw 'Return browser tests failed' }
 & node (Join-Path $PSScriptRoot 'route-snapshot.test.cjs')

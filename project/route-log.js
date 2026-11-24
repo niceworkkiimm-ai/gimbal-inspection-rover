@@ -74,7 +74,7 @@
           e.elapsed+=dt;e.speed=gap?0:(s[5]-this.previous[5])/dt;
         }
         e.distance=this.base.d+(s[5]-o[5])/1000;
-        e.rememberPose(s[1],gap);
+        e.rememberPose(s[1],gap,now);
         e.addPoint(gap||!this.previous,gap||!this.previous);
         this.previous=s.slice();this.cursor=s[0];this.session=p.session;
       }

@@ -1,5 +1,7 @@
 # 巡检小车项目与开发对话交接
 
+2026-11-24。两种小车模式的 D6 / D7 按键通过带校验的 H2 帧发送横移请求。未按键时继续发送 H1。横移复用既有回中、斜坡、换向间隔和失联停车。编码器坐标系左移四轮符号依次为负、正、正、负，实车逻辑 PWM 还需乘已有的 WHEEL_PWM_TO_RPM_SIGN。网页停车约 250 ms 后恢复建图。气体沿线标记仍在行驶中记录。
+
 2026-11-24。网页 V8.30 修正 Y 高度方向的扫描弧线。按停车站、水平指向和俯仰层取中位数，限制转动和平移，自动估算保留局部斜率。确认正对平墙时，当前站或回看末站可用近水平回波作竖墙参考。保存的探头距离仍为原始读数。
 
 2026-11-24。V8.29 将指令角、标定后的中心射线位置、原始斜距和估算墙面区分开。三维页提供自动估算、本站正对平墙和原始射线点。校准用量角器分别测水平和俯仰在指令 −30° / +30° 时的实际指向，浏览器保存参数并重算当前缓存。新档案保存采样车头方向、指令角和本站参考标记，以支持一致回看。
@@ -40,12 +42,12 @@ ESP32-CAM加入同一热点，网页直接向摄像头取图，不经过STM32串
 
 | 部分 | 本次核对版本 | 相对源码根目录的入口 |
 | --- | --- | --- |
-| STM32F407ZG | V8.16 | Gimbal_STLink.uvprojx；User/main.c |
-| 基座ESP-01S | V4.11 | ESP01S_Base_UDP/ESP01S_Base_UDP.ino |
-| 手持NodeMCU | V1.6 | NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino |
+| STM32F407ZG | V8.31 | Gimbal_STLink.uvprojx；User/main.c |
+| 基座ESP-01S | V4.13 | ESP01S_Base_UDP/ESP01S_Base_UDP.ino |
+| 手持NodeMCU | V1.7 | NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino |
 | 普通AI Thinker ESP32-CAM | V1.5 | ESP32CAM_Camera/ESP32CAM_Camera.ino |
-| 二维网页 | V8.18 | gimbal-radar-standalone.html |
-| 三维网页 | V8.21 | gimbal-3d-scan.html |
+| 二维网页 | V8.31 | gimbal-radar-standalone.html |
+| 三维网页 | V8.31 | gimbal-3d-scan.html |
 | 巡检回放入口 | V8.21 | 巡检回放.html |
 
 ESP01S_Handheld_MPU_UDP、ESP32S3_Camera等是历史/辅助目录，不是当前整机应烧录的组合。特别注意摄像头实物是普通ESP32-CAM，不是ESP32-S3。

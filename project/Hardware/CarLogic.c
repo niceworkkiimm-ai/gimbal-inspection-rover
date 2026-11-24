@@ -1,5 +1,6 @@
 #include "CarLogic.h"
 #include "CarConfig.h"
+#include "WheelSpeedConfig.h"
 #include <string.h>
 
 static int32_t Magnitude(int32_t x) { return x < 0 ? -x : x; }
@@ -53,9 +54,9 @@ static int16_t Tilt(int32_t angle)
     return (int16_t)(Sign(angle)*(n-CAR_DEADZONE_TENTHS)*CAR_MAX_PWM_PERMILLE/
                     (CAR_FULL_TILT_TENTHS-CAR_DEADZONE_TENTHS));
 }
-void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
+void CarLogic_StepWithButtons(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
                    uint8_t safe,uint8_t rx_fault,uint8_t fresh,uint8_t ready,uint32_t packet,
-                   int16_t roll,int16_t pitch)
+                   int16_t roll,int16_t pitch,uint8_t buttons)
 {
     int32_t r=(int32_t)roll-CAR_ROLL_ZERO_TENTHS;
     int32_t p=(int32_t)pitch-CAR_PITCH_ZERO_TENTHS;
@@ -80,6 +81,19 @@ void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
     if(Magnitude(r)>CAR_UNSAFE_TILT_TENTHS||Magnitude(p)>CAR_UNSAFE_TILT_TENTHS){
         PauseInput(s,now,CAR_HOLD_TILT);return;
     }
+    /* A chord stops both axes. Require both keys released before rearming. */
+    if(buttons>2U||(s->previous_buttons==3U && buttons)){
+        s->previous_buttons=3U;CarLogic_Stop(s,now,CAR_NEUTRAL);return;
+    }
+    if(buttons!=s->previous_buttons){
+        s->previous_buttons=buttons;
+        if(!buttons && (Magnitude(r)>CAR_NEUTRAL_TENTHS||Magnitude(p)>CAR_NEUTRAL_TENTHS))
+            CarLogic_Stop(s,now,CAR_NEUTRAL);
+        else {
+            ZeroPwm(s,now);s->last_step=now;s->state=s->armed?CAR_READY:CAR_NEUTRAL;
+        }
+        return;
+    }
     if(s->paused) {
         ZeroPwm(s,now);
         s->state=CAR_NEUTRAL;s->hold_reason=CAR_HOLD_RECOVER;s->last_step=now;
@@ -87,7 +101,7 @@ void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
             CarLogic_Stop(s,now,CAR_NEUTRAL);
         }
         else {
-            if(Magnitude(r)>CAR_RECOVERY_TILT_TENTHS||
+            if(buttons||Magnitude(r)>CAR_RECOVERY_TILT_TENTHS||
                Magnitude(p)>CAR_RECOVERY_TILT_TENTHS) {
                 s->recovery_count=0;s->hold_reason=CAR_HOLD_TILT;return;
             }
@@ -107,7 +121,7 @@ void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
     }
     if(!s->armed) {
         s->state=CAR_NEUTRAL;s->hold_reason=CAR_HOLD_CENTER;s->last_step=now;
-        if(Magnitude(r)>CAR_NEUTRAL_TENTHS||Magnitude(p)>CAR_NEUTRAL_TENTHS) {
+        if(buttons||Magnitude(r)>CAR_NEUTRAL_TENTHS||Magnitude(p)>CAR_NEUTRAL_TENTHS) {
             s->neutral_count=0;return;
         }
         if(new_packet) {
@@ -121,7 +135,12 @@ void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
     }
     s->hold_reason=CAR_HOLD_NONE;
     /* Same axes as the gimbal: pitch fore/aft, roll left/right. */
-    CarLogic_Mix(Tilt(p*CAR_FORWARD_SIGN),Tilt(r*CAR_TURN_LEFT_SIGN),target);
+    if(buttons){
+        /* Forward-positive wheels FL, FR, RL, RR. Body +Y (left) is - + + -. */
+        const int16_t side=(buttons==1U?CAR_STRAFE_PWM_PERMILLE:-CAR_STRAFE_PWM_PERMILLE)
+                           *WHEEL_PWM_TO_RPM_SIGN;
+        target[0]=target[3]=(int16_t)-side;target[1]=target[2]=side;
+    }else CarLogic_Mix(Tilt(p*CAR_FORWARD_SIGN),Tilt(r*CAR_TURN_LEFT_SIGN),target);
     /* Neutral means stop now; no slow drift while the wrist is centered. */
     if(!target[0]&&!target[1]) {
         for(i=0;i<4;i++){if(s->pwm[i])s->zero_since[i]=now;s->pwm[i]=0;}
@@ -144,4 +163,11 @@ void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
         s->pwm[i]=(int16_t)(s->pwm[i]+delta);
         if(s->pwm[i]){s->previous_sign[i]=Sign(s->pwm[i]);s->state=CAR_MOVING;}
     }
+}
+
+void CarLogic_Step(CarLogic *s,uint32_t now,uint8_t active,uint8_t enabled,
+                   uint8_t safe,uint8_t rx_fault,uint8_t fresh,uint8_t ready,uint32_t packet,
+                   int16_t roll,int16_t pitch)
+{
+    CarLogic_StepWithButtons(s,now,active,enabled,safe,rx_fault,fresh,ready,packet,roll,pitch,0U);
 }

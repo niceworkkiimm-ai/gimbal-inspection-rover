@@ -276,7 +276,7 @@
     const gasMarks=[];
     for(const p of samples){
       const r=gas.summarize(demoGases(p)),last=gasMarks.at(-1);
-      if(last && last.level===r.level && p.distance-last.distance<.12)continue;
+      if(last && last.level===r.level && p.distance-last.distance<gas.spacing)continue;
       gasMarks.push({x:p.x,y:p.y,time:p.time*1000,distance:p.distance,level:r.level,detail:r.detail});
     }
     const sampleAt=t=>samples[Math.min(samples.length-1,Math.floor(clamp(t,0,duration)/step))];

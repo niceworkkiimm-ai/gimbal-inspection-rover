@@ -1,9 +1,9 @@
 /* Gas readings belong to observation locations, never to unobserved stretches of route. */
 (function(root){
   'use strict';
-  const colors={normal:'#50d599',warning:'#ffc14f',alarm:'#ff575c',fault:'#cb9aff',unknown:'#9ca7b4'};
+  const colors={normal:'#c4a2ff',warning:'#ffda6a',alarm:'#ff459c',fault:'#539bff',unknown:'#9ca7b4'};
   const labels={normal:'四路正常',warning:'气体预警',alarm:'气体报警',fault:'模块故障',unknown:'数据不全'};
-  const MAX_MARKS=10000;
+  const spacing=.06,MAX_MARKS=10000;
   function summarize(rows) {
     const rank={normal:0,unknown:1,fault:2,warning:3,alarm:4};
     let level='normal';const issues=[],codes=[],seen=new Set();
@@ -33,7 +33,7 @@
       now-route.lastReceived>1200 || now-route.poseReceivedAt>1200)return;
     const marks=route.gasMarks,last=marks.at(-1);
     if(last && last.level===observation.level && route.gasKey===observation.key &&
-        last.session===route.session && route.distance-last.distance<.12)return;
+        last.session===route.session && route.distance-last.distance<spacing)return;
     marks.push({x:route.x,y:route.y,time:route.elapsed,distance:route.distance,
       level:observation.level,detail:observation.detail,session:route.session});
     route.gasKey=observation.key;
@@ -51,6 +51,6 @@
       return {x:m.x,y:m.y,time,distance,level:m.level,detail:m.detail};
     });
   }
-  const api={colors,labels,summarize,observe,clean};
+  const api={spacing,colors,labels,summarize,observe,clean};
   root.RouteGas=api;if(typeof module==='object'&&module.exports)module.exports=api;
 })(typeof globalThis==='undefined'?this:globalThis);

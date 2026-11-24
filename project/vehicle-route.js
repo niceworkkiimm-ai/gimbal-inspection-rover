@@ -39,9 +39,28 @@
       this.poseHistory=[];this.poseReceivedAt=0;this.gasMarks=[];this.gasKey=null;this.gasDropped=0;
     }
     rememberPose(ms, gap, now=Date.now()) {
+      const last=this.poseHistory.at(-1),dt=last?(ms-last.ms)>>>0:0;
+      // Use the scan clock. Check accumulated travel and yaw so a pivot or
+      // a slow sideways creep cannot be mistaken for a parked chassis.
+      const q=last?.quiet;
+      const quiet=!gap&&!last?.gap&&q&&dt>0&&dt<=320&&
+        Math.abs(this.distance-q.distance)<=.003&&Math.hypot(this.x-q.x,this.y-q.y)<=.003&&
+        Math.abs(wrapAngle(this.heading-q.heading))<=.008
+        ?q:{ms,distance:this.distance,x:this.x,y:this.y,heading:this.heading};
       this.poseReceivedAt=now;
-      this.poseHistory.push({ms, x:this.x, y:this.y, heading:this.heading, gap});
+      this.poseHistory.push({ms, x:this.x, y:this.y, heading:this.heading, gap,quiet});
       if(this.poseHistory.length>64)this.poseHistory.shift();
+    }
+    stationaryAt(ms) {
+      const h=this.poseHistory;
+      for(let i=h.length-1;i>=0;i--){
+        const a=h[i],dt=(ms-a.ms)>>>0;
+        if(dt>=2147483648)continue;
+        if(!a.quiet||a.gap||((ms-a.quiet.ms)>>>0)<250)return false;
+        if(dt===0)return true;
+        const b=h[i+1];return !!b&&b.quiet===a.quiet&&!b.gap&&dt<((b.ms-a.ms)>>>0);
+      }
+      return false;
     }
     poseAt(ms) {
       const history=this.poseHistory;
@@ -173,6 +192,10 @@
         throw Error('扫描舵机指令无效。');
       fields.commands=p.commands.slice();
     }
+    if(p.stationary!==undefined){
+      if(typeof p.stationary!=='boolean')throw Error('扫描停车标记无效。');
+      fields.stationary=p.stationary;
+    }
     if(p.frontWall!==undefined){
       if(typeof p.frontWall!=='boolean')throw Error('平墙标记无效。');
       fields.frontWall=p.frontWall;
@@ -289,7 +312,13 @@
     // Legacy inspection files retain their route; unrelated old station records are ignored.
     return cleanRoute(data.route);
   }
-  const exported={RouteEngine,validConfig,defaults,wrapDelta,cleanRoute,cleanScan,captureScan,
+  function wheelMotion(frame){
+    const w=frame?.wheelSpeed;
+    return (frame?.vehicle?.online===true&&frame.vehicle.state===4)||
+      (w?.online===true&&w.valid===true&&w.ageMs<=400&&Array.isArray(w.measuredRpm10)&&
+       w.measuredRpm10.some(n=>Math.abs(n)>15));
+  }
+  const exported={wheelMotion,RouteEngine,validConfig,defaults,wrapDelta,cleanRoute,cleanScan,captureScan,
     routeRecord,parseRouteFile,MAX_ROUTE_BYTES,MAX_SCANS,MAX_SCAN_POINTS};
   if(typeof module==='object'&&module.exports)module.exports=exported;
   root.VehicleRouteCore=exported;
@@ -349,7 +378,7 @@
       <header><div><h2>巡检行驶轨迹</h2><p>四轮编码器 · 相对起点的平面路线</p></div><span id="state" class="tag">等待编码器数据</span></header>
       <div class="files"><button id="saveRoute" class="primary">保存路线</button><button id="openRoute">打开路线</button><button id="liveRoute" hidden>返回实时</button><span id="routeFileStatus" class="file-status" role="status">当前路线</span><input id="routeFile" type="file" accept=".json,application/json" hidden></div>
       <div class="snapshots"><button id="saveScan">保存当前扫描点</button><label><span class="scan-dot">●</span> 扫描点<select id="scanSelect" aria-label="已保存扫描点"><option value="">暂无扫描点</option></select></label><button id="viewScan" disabled>查看点图</button><small id="scanStatus" role="status">停车完成所需扫描后保存，点击路线红点回看。</small></div>
-      <div class="snapshots"><button id="viewMap">查看整程三维图</button><span>气体采样点 · 绿 正常 / 黄 预警 / 红 报警 / 紫 故障 / 灰 数据不全</span></div>
+      <div class="snapshots"><button id="viewMap">查看整程三维图</button><span>气体采样点 · 淡紫 正常 / 金 预警 / 洋红 报警 / 蓝 故障 / 灰 数据不全</span></div>
       <div class="note" id="gasMessage" role="status"></div><div class="note" id="gasInspect" hidden></div>
       <div class="body">
         <div class="map"><canvas id="map" aria-label="小车编码器估算行驶轨迹图"></canvas><div class="map-hint" id="hint">起点朝上 · 左为车体左侧 · 拖动平移 / 滚轮缩放</div>
@@ -503,7 +532,7 @@
     const marks=shown.gasMarks||[];
     function plotMark(m){
       const q=screen(m.x,m.y),important=['alarm','warning','fault'].includes(m.level);
-      ctx.fillStyle=gas.colors[m.level];ctx.beginPath();ctx.arc(q.x,q.y,important?5:3,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=gas.colors[m.level];ctx.beginPath();ctx.arc(q.x,q.y,important?5:2,0,Math.PI*2);ctx.fill();
     }
     marks.forEach(m=>{if(m.level==='normal'||m.level==='unknown')plotMark(m);});
     marks.forEach(m=>{if(m.level!=='normal'&&m.level!=='unknown')plotMark(m);});

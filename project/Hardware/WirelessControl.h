@@ -12,7 +12,7 @@ typedef struct
     float roll;
     float pitch;
     uint32_t arrival_cycles;
-    uint8_t protocol, ready, requested_mode, mode_epoch;
+    uint8_t protocol, ready, requested_mode, mode_epoch, buttons;
 } WirelessControlData_t;
 
 typedef enum

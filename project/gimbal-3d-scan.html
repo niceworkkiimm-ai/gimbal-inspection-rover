@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>三维巡检地图 · V8.30</title>
+  <title>三维巡检地图 · V8.31</title>
   <style>
     :root { --bg:#0d1210; --panel:#151d19; --panel-2:#1b2620; --line:#304139; --text:#edf4ef; --muted:#92a69a; --green:#4bda9a; --amber:#f0b95b; --red:#ff6d6d; }
     * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI","Microsoft YaHei",sans-serif; }
@@ -53,14 +53,14 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
 </head>
 <body data-scan-page="3d">
   <main class="app">
-    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.30</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">巡检回放</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
+    <header class="top"><div class="identity"><div class="mark" aria-hidden="true"></div><div><h1>嵌入电团队 <span class="version">V8.31</span></h1><p class="subtitle">三维巡检地图 · 超声波与车轮里程计</p></div></div><div class="top-actions"><span class="stream"><i id="streamDot"></i><span id="streamText">正在连接基座 ESP</span></span><a id="demo-launch" class="btn" style="text-decoration:none" href="?demo=1">巡检回放</a><button id="pause" class="btn" type="button">暂停记录</button><button id="connect" class="btn btn-primary" type="button">立即重连</button></div></header>
     <section class="layout">
       <aside class="panel side left"><div class="reading"><div class="eyebrow">当前测距</div><div class="distance"><span id="distance">--</span> <span>cm</span></div><div class="signal" id="echoText">等待 HC-SR04 数据</div></div><div class="divider"></div><div><div class="eyebrow">前向测距</div><div class="status"><strong><i id="statusDot"></i><span id="status">等待数据</span></strong><span>20 / 40 cm</span></div></div><div class="divider"></div><div><div class="eyebrow">舵机指令角</div><div class="metric-list"><div class="metric"><span>水平角</span><strong id="yaw">-- deg</strong></div><div class="metric"><span>俯仰角</span><strong id="pitch">-- deg</strong></div><div class="metric"><span>相对高度</span><strong id="height">-- cm</strong></div></div></div></aside>
-      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="wallsToggle" class="btn btn-compact" type="button" aria-pressed="true">墙面估算：开</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div class="sonar-options"><label>回波定位 <select id="echoMode"><option value="auto">自动估算</option><option value="front">本站正对平墙</option><option value="raw">原始射线点</option></select></label><details id="angleSetup"><summary>舵机角度标定</summary><p>用量角器测量两轴指令为 −30°、+30° 时的实际角度。水平向车体左侧、俯仰向上为正。</p><div id="angleInputs"></div><button id="applyAngles" type="button" class="btn btn-compact">应用标定</button><button id="resetAngles" type="button" class="btn btn-compact">恢复标称角</button><span id="angleResult" role="status"></span></details></div><div id="projectionStatus" role="status"></div><div id="wallStatus" style="font-size:12px;color:#b8c8d8">等待连续墙面回波</div><div id="routeGasAlert" role="status" hidden></div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span>沿线气体 · 绿正常 / 黄预警 / 红报警 / 紫故障 / 灰未知</span><span id="planLegend" hidden><b class="scan" style="background:#f0b95b"></b>避障路径</span><span><b style="background:#87aac7"></b>估算近地回波（±5 cm）</span><span><b class="now"></b>40–400 cm</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
+      <section class="panel scene-panel"><div class="scene-head"><strong>三维巡检地图</strong><div class="scene-tools"><button id="followRover" class="btn btn-compact" type="button" aria-pressed="true">跟随小车</button><button id="wallsToggle" class="btn btn-compact" type="button" aria-pressed="true">墙面估算：开</button><button id="overview" class="btn btn-compact" type="button">查看全程</button><button id="roverView" class="btn btn-compact" type="button" aria-pressed="false">查看车身</button></div></div><div id="mapStatus" role="status">等待轮编码器位姿</div><div class="sonar-options"><label>回波定位 <select id="echoMode"><option value="auto">自动估算</option><option value="front">本站正对平墙</option><option value="raw">原始射线点</option></select></label><details id="angleSetup"><summary>舵机角度标定</summary><p>用量角器测量两轴指令为 −30°、+30° 时的实际角度。水平向车体左侧、俯仰向上为正。</p><div id="angleInputs"></div><button id="applyAngles" type="button" class="btn btn-compact">应用标定</button><button id="resetAngles" type="button" class="btn btn-compact">恢复标称角</button><span id="angleResult" role="status"></span></details></div><div id="projectionStatus" role="status"></div><div id="wallStatus" style="font-size:12px;color:#b8c8d8">等待连续墙面回波</div><div id="routeGasAlert" role="status" hidden></div><div id="scene" aria-label="三维巡检地图，可旋转缩放"><span class="corner tl">地面网格 0.5 m</span><span class="corner br" id="sceneReadout">-- cm<br>-- deg / -- deg</span></div><div class="legend"><span><b class="scan"></b>当前扫描线</span><span><b class="scan" style="background:#78bfff"></b>行驶轨迹</span><span>沿线气体 · 淡紫正常 / 金预警 / 洋红报警 / 蓝故障 / 灰未知</span><span id="planLegend" hidden><b class="scan" style="background:#f0b95b"></b>避障路径</span><span><b style="background:#87aac7"></b>估算近地回波（±5 cm）</span><span><b class="now"></b>40–400 cm</span><span><b></b>20-40 cm 注意</span><span><b class="alert"></b>小于20 cm 报警</span></div></section>
       <aside class="panel side right"><div class="eyebrow">车前已扫描点</div><div id="targets" class="target-list"></div><div class="divider"></div><div class="eyebrow">气体环境</div><div id="gasList" class="gas-list"><div class="gas-card"><strong>等待气体模块</strong><small>CH4 / O2 / CO / H2S</small></div></div><div class="divider"></div><div class="cache-head"><div class="eyebrow">点云缓存</div><button id="clearPoints" class="btn btn-danger btn-compact" type="button" title="清除全部已记录扫描点">清空点云</button></div><div class="point-bar"><div class="bar-row"><span>已保留扫描点</span><strong id="pointCount">0 / 6000</strong></div><div class="bar"><i id="pointFill"></i></div></div><div class="raw"><strong id="raw">等待数据</strong><br>距离(cm), 水平角, 俯仰角, 报警</div></aside>
     </section>
     <section class="bottom"><section class="panel profile"><div class="profile-head"><strong>车身前向截面</strong><span>横轴：0–400 cm · 相对当前车身</span></div><canvas id="profile" aria-label="障碍物高度截面图"></canvas></section><aside class="panel log"><div class="eyebrow">扫描日志</div><ul id="log"></ul></aside></section>
-    <footer class="footer"><span>V8.30 · 有效回波 2–400 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
+    <footer class="footer"><span>V8.31 · 有效回波 2–400 cm · 地图位姿为轮编码器估算</span><span id="update">更新于 --:--:--</span></footer>
   </main>
   <!-- V8.12 / 2026-09-21: 实时与回看共用原版详细云台模型；移除实时半透明锥体，保留细射线/测距点。仅网页变更，接线与固件不变。 -->
   <!-- V8.11 / 2026-09-21: 路线点保存当前扫描快照并独立回看；仅网页功能更新，固件和全部接线不变。 -->
@@ -69,13 +69,13 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
   <script src="OrbitControls.umd.js?v=8.14"></script>
   <script src="rover-model-data.js?v=8.18"></script>
   <script src="gimbal-model.js?v=8.18"></script>
-  <script src="route-gas.js?v=8.27"></script>
-  <script src="sonar-projection.js?v=8.30"></script>
+  <script src="route-gas.js?v=8.31"></script>
+  <script src="sonar-projection.js?v=8.31"></script>
   <script src="scan-walls.js?v=8.28"></script>
-  <script src="scan-snapshot.js?v=8.30"></script>
-  <script src="rover-demo.js?v=8.27"></script>
-  <script src="vehicle-route.js?v=8.30"></script>
-  <script src="route-log.js?v=8.19"></script>
+  <script src="scan-snapshot.js?v=8.31"></script>
+  <script src="rover-demo.js?v=8.31"></script>
+  <script src="vehicle-route.js?v=8.31"></script>
+  <script src="route-log.js?v=8.31"></script>
   <script src="wheel-speed-panel.js?v=8.24"></script>
   <script src="camera-panel.js?v=8.17"></script>
   <script>
@@ -142,6 +142,7 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     cloud.name='world-scan-points';cloud.frustumCulled=false;scene.add(cloud);
     const walls=ScanWalls.layer(THREE,UNITS_PER_METER);
     scene.add(walls.mesh);
+    const hiddenScanSlots=new Set();
     let wallsDirty=false,lastWallBuild=-Infinity,wallSummary='等待连续墙面回波';
     function referenced(p){
       return frontStation!==null&&p.station===frontStation&&frontPose&&
@@ -151,19 +152,21 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     function wallSamples(){
       return Array.from(mapPoints.values(),p=>({x:p.pos.x/UNITS_PER_METER,y:p.pos.y/UNITS_PER_METER,
         z:p.pos.z/UNITS_PER_METER,yaw:p.yaw,pitch:p.pitch,distance:p.distance,station:p.station,
-        head:p.pose.heading,commands:[p.cmdYaw,p.cmdPitch],...(referenced(p)?{frontWall:true}:{})}));
+        head:p.pose.heading,...(simulated?{}:{stationary:true}),commands:[p.cmdYaw,p.cmdPitch],...(referenced(p)?{frontWall:true}:{})}));
     }
     function rebuildWalls(){
       const samples=wallSamples(),raw=$('echoMode').value==='raw';
       const located=SonarProjection.resolve(samples,{raw:raw||simulated});
-      const eligible=located.display.filter(p=>!located.uncertain.has(p));
+      const eligible=located.display.filter(p=>!located.uncertain.has(p)&&!located.excluded.has(p));
       walls.mesh.visible=showSurface&&!raw;
       const result=walls.update(walls.mesh.visible?eligible:[]),remaining=[];
+      hiddenScanSlots.clear();
       let i=0;
       for(const p of mapPoints.values()){
         const v=located.display[i++];
+        if(located.excluded.has(v))hiddenScanSlots.add(p.slot);
         scanPositionAttr.setXYZ(p.slot,v.x*UNITS_PER_METER,v.y*UNITS_PER_METER,v.z*UNITS_PER_METER);
-        if(!located.uncertain.has(v)&&!result.covered.has(v))remaining.push(p.slot);
+        if(!located.excluded.has(v)&&!located.uncertain.has(v)&&!result.covered.has(v))remaining.push(p.slot);
       }
       scanPositionAttr.needsUpdate=true;
       wallPointIndex.array.set(remaining);wallPointIndex.needsUpdate=true;
@@ -176,6 +179,7 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
         (samples.length?'按标定射线定位':'等待扫描');
       $('projectionStatus').textContent=raw?'按实测距离和标定后的中心射线画点':[
         located.corrected?'平墙估算 '+located.corrected+' 点':note,
+        located.belowFloor?'低于地面容差 '+located.belowFloor+' 点':'',
         located.pitchCorrected?'其中俯仰截面补偿 '+located.pitchCorrected+' 点':'',
         located.uncertain.size?'等距回波方向未定 '+located.uncertain.size+' 点，可切换原始射线查看':''
       ].filter(Boolean).join(' · ');
@@ -214,7 +218,7 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     $('applyAngles').onclick=()=>setAngles(angleFields.map(field=>field.valueAsNumber));
     $('resetAngles').onclick=()=>setAngles(SonarProjection.nominal);
     const gasDots=new THREE.Points(new THREE.BufferGeometry(),new THREE.PointsMaterial({
-      vertexColors:true,size:7,sizeAttenuation:false,depthTest:false}));
+      vertexColors:true,size:4,sizeAttenuation:false,depthTest:false}));
     gasDots.renderOrder=3;gasDots.name='route-gas-observations';scene.add(gasDots);
     let lastGasMark=null;
     const trail=new THREE.LineSegments(new THREE.BufferGeometry(),
@@ -286,7 +290,7 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
     function clearPointCloud(){
       frontStation=null;if($('echoMode').value==='front')$('echoMode').value='auto';
       $('projectionStatus').textContent='等待扫描';
-      mapPoints.clear();slots.length=0;nextSlot=0;pendingScans.length=0;latestScan=null;
+      mapPoints.clear();hiddenScanSlots.clear();slots.length=0;nextSlot=0;pendingScans.length=0;latestScan=null;
       scanGeometry.setIndex(null);walls.update([]);wallsDirty=false;wallSummary='等待连续墙面回波';
       if(walls.mesh.visible)$('wallStatus').textContent=wallSummary;
       current.visible=beam.visible=false;updateCloud();
@@ -302,10 +306,12 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
         const scan=pendingScans[i];
         const expired=now-scan.at>POSE_WAIT_MS;
         const pose=expired?null:routeEngine.poseAt(scan.ms);
-        if(pose){
+        const parked=pose&&routeEngine.stationaryAt(scan.ms);
+        if(parked){
           addPoint(scan,pose);
           if(latestScan?.sequence===scan.sequence&&state.distanceValid&&state.link&&state.distance<=DISPLAY_RANGE_CM)showBeam(scan,pose);
         }
+        if(pose&&!parked&&latestScan?.sequence===scan.sequence)current.visible=beam.visible=false;
         if(pose||expired)pendingScans.splice(i,1);
         else i++;
       }
@@ -361,8 +367,9 @@ h1{font-size:22px;letter-spacing:.5px}.subtitle{margin-top:5px}
       if(!simulated)registerScans(now);
       const status=simulated?'黄色为规划路径 · 蓝色为已行驶轨迹':!route.config.confirmed?
         '请在下方「路线标定」确认四轮参数后启用地图':!ready?
-        '等待路线同步 · 已记录点位保留':route.gaps||route.restarts?
-        '轮编码器估算 · 路线有缺口，点位可能偏移':'轮编码器估算 · 扫描点固定在地图上';
+        '等待路线同步 · 已记录点位保留':!routeEngine.stationaryAt(routeEngine.poseHistory.at(-1)?.ms)?
+        '行走或等待停稳 · 暂停新增扫描点':route.gaps||route.restarts?
+        '轮编码器估算 · 路线有缺口，点位可能偏移':'已停稳 · 正在记录扫描点';
       if($('mapStatus').textContent!==status)$('mapStatus').textContent=status;
       updateTrail(route);
       const marks=route.gasMarks||[],last=marks.at(-1);
@@ -410,6 +417,7 @@ function updateGas(gases) {
       const sensor=localPoint(0,0,0);
       const nearby=[];
       for(const point of mapPoints.values()){
+        if(hiddenScanSlots.has(point.slot))continue;
         const pos=point.pos.clone().sub(origin);
         if(pos.x*pos.x+pos.z*pos.z>((DISPLAY_RANGE_CM+40)*UNITS_PER_CM)**2)continue;
         pos.applyAxisAngle(yawAxis,-activeRoute.heading).sub(sensor);
@@ -473,7 +481,8 @@ function updateGas(gases) {
       const actual=measured(yaw,pitch);
       yawAssembly.rotation.y=THREE.MathUtils.degToRad(actual.yaw);
       pitchAssembly.rotation.x=-THREE.MathUtils.degToRad(actual.pitch);
-      if(!inRange||!link)current.visible=beam.visible=false;
+      const moving=!simulated&&VehicleRouteCore.wheelMotion(frame);
+      if(!inRange||!link||moving)current.visible=beam.visible=false;
       else if(simulated||!routeEngine.config.confirmed)showBeam(state,activeRoute);
       else if(!paused){
         queueScan(frame,state);
@@ -590,7 +599,7 @@ function updateGas(gases) {
         .filter(({relative})=>Math.hypot(relative.x,relative.z)<=(DISPLAY_RANGE_CM+40)*UNITS_PER_CM)
         .slice(-800)
         .map(({point,relative})=>({distance:point.distance,yaw:point.yaw,pitch:point.pitch,
-          station:point.station,head:Math.atan2(Math.sin(point.pose.heading-routeEngine.heading),Math.cos(point.pose.heading-routeEngine.heading)),
+          station:point.station,stationary:true,head:Math.atan2(Math.sin(point.pose.heading-routeEngine.heading),Math.cos(point.pose.heading-routeEngine.heading)),
           commands:[point.cmdYaw,point.cmdPitch],...(referenced(point)?{frontWall:true}:{}),position:relative.applyAxisAngle(yawAxis,-routeEngine.heading).multiplyScalar(1/UNITS_PER_METER).toArray()}));
       if(!savedPoints.length)throw Error('当前位置附近没有可保存的点，请停车扫描并等待地图更新。');
       return {kind:'3d',points:savedPoints};

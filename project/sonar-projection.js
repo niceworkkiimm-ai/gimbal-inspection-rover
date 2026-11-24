@@ -230,11 +230,73 @@
   }
 
 
-  function resolve(points,{raw=false}={}){
+  // Old archives have no per-return time. Only infer travel for a contiguous
+  // locked-beam run spanning multiple vehicle poses. Repeated, stable returns
+  // at the same pose remain available even within such a run.
+  function legacyTravelPoints(points){
+    const omitted=new Set();
+    for(let i=0;i<points.length;){
+      const first=points[i],cmd=first.commands;
+      if(!cmd||first.stationary!==undefined||!Number.isFinite(first.head)){i++;continue;}
+      let j=i+1;
+      while(j<points.length){
+        const p=points[j];
+        if(p.stationary!==undefined||!Number.isFinite(p.head)||!p.commands||
+           p.commands[0]!==cmd[0]||p.commands[1]!==cmd[1])break;
+        j++;
+      }
+      if(j-i>=4){
+        const run=points.slice(i,j).map(ray),start=run[0];
+        const spansTravel=new Set(run.map(r=>r.p.station)).size>=3&&run.some(r=>
+          Math.hypot(r.ox-start.ox,r.oz-start.oz)>.12||Math.cos(r.p.head-start.p.head)<Math.cos(9*rad));
+        if(spansTravel){
+          for(let k=0;k<run.length;k++){
+            const r=run[k];
+            const repeat=[run[k-1],run[k+1]].some(v=>v&&Math.hypot(r.ox-v.ox,r.oz-v.oz)<=.003&&
+              Math.cos(r.p.head-v.p.head)>=Math.cos(.5*rad)&&Math.abs(r.r-v.r)<=.012+.02*r.r);
+            if(!repeat)omitted.add(r.p);
+          }
+        }
+      }
+      i=j;
+    }
+    return omitted;
+  }
+
+  function isolatedBelowFloor(points,excluded){
+    const groups=new Map(),isolated=new Set();
+    for(const p of points){
+      if(p.pitch>=0||p.y>=-.05||excluded.has(p))continue;
+      if(!groups.has(p.station))groups.set(p.station,[]);
+      groups.get(p.station).push(p);
+    }
+    for(const group of groups.values()){
+      const sorted=group.sort((a,b)=>a.distance-b.distance);
+      let start=0;
+      for(const p of sorted){
+        const tolerance=4+.06*p.distance;
+        while(sorted[start].distance<p.distance-tolerance)start++;
+        let supported=false;
+        for(let i=start;i<sorted.length&&sorted[i].distance<=p.distance+tolerance;i++){
+          const q=sorted[i],yaw=Math.abs(q.yaw-p.yaw),pitch=Math.abs(q.pitch-p.pitch);
+          if(Math.max(yaw,pitch)>=1&&yaw<=7&&pitch<=7){supported=true;break;}
+        }
+        if(!supported)isolated.add(p);
+      }
+    }
+    return isolated;
+  }
+
+  function resolve(points,{raw=false,legacyTravel=false}={}){
     const display=points.slice(),uncertain=new Set(),stations=new Map();
     let pitchCorrected=0,confirmed=0;
-    if(raw)return {display,uncertain,corrected:0,pitchCorrected,confirmed};
+    const excluded=!raw&&legacyTravel?legacyTravelPoints(points):new Set();
+    const travel=excluded.size;
+    const floor=raw?new Set():isolatedBelowFloor(points,excluded),belowFloor=floor.size;
+    for(const p of floor)excluded.add(p);
+    if(raw)return {display,uncertain,excluded,travel,belowFloor,corrected:0,pitchCorrected,confirmed};
     points.forEach((p,i)=>{
+      if(excluded.has(p))return;
       if(!Number.isFinite(p.head)||!Number.isFinite(p.distance)||p.y<.075||p.distance<2)return;
       const groupKey=(p.frontWall===true?'reference:':'auto:')+p.station;
       if(!stations.has(groupKey))stations.set(groupKey,[]);
@@ -277,7 +339,7 @@
       if(model.explicit)for(const r of group)if(display[r.i]===r.p&&local.has(r.p))uncertain.add(r.p);
     }
     const corrected=display.reduce((count,p,i)=>count+Number(p!==points[i]),0);
-    return {display,uncertain,corrected,pitchCorrected,confirmed};
+    return {display,uncertain,excluded,travel,belowFloor,corrected,pitchCorrected,confirmed};
   }
   const api={resolve,angles,validCalibration,nominal};
   root.SonarProjection=api;if(typeof module==='object'&&module.exports)module.exports=api;

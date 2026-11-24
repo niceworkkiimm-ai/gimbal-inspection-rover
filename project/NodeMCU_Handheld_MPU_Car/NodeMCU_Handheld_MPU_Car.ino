@@ -1,7 +1,7 @@
 #include "secrets.h"
 /*
- * NodeMCU V3 CH340G 手持端 V1.6，项目接线说明 V8.8（2026-09-20）。
- * 兼容当前 STM32 V8.2 / 基座 ESP V4.8；本次仅需烧录手持 NodeMCU，接线不变。
+ * NodeMCU V3 CH340G 手持端 V1.7。D6(GPIO12) 按住左移，D7(GPIO13) 按住右移，两按钮均接 GND、内部上拉。
+ * 横移需配套基座 V4.13、STM32 V8.31。体感及摇杆小车模式均可使用。
  * V1.6：MPU6050 初始化/校准改为分步状态机，setup() 不再阻塞等待 MPU。
  * 旧版问题：一次性采集300次样本，且 I2C 每时钟位允许拉伸1500us；PCB 上总线
  * 一旦偏慢或接触不良，单次14字节读取最坏可累计上百毫秒，300次即几十秒，
@@ -65,6 +65,8 @@ constexpr uint8_t kMpuAddress = 0x68;
 constexpr uint8_t kSdaPin = 4;
 constexpr uint8_t kSclPin = 5;
 constexpr uint8_t kButtonPin = 14;
+constexpr uint8_t kStrafeLeftPin = D6, kStrafeRightPin = D7;
+uint8_t strafeButtons = 0;
 constexpr uint32_t kSendPeriodUs = 20000;
 
 // V1.6 MPU 分步初始化参数。
@@ -513,6 +515,16 @@ void connectToBase() {
   }
 }
 
+void updateStrafeButtons() {
+  static uint8_t lastRaw=0;
+  static uint32_t changedAt=0;
+  const uint8_t raw=(digitalRead(kStrafeLeftPin)==LOW ? 1 : 0) |
+                    (digitalRead(kStrafeRightPin)==LOW ? 2 : 0);
+  const uint32_t now=millis();
+  if(raw!=lastRaw){lastRaw=raw;changedAt=now;}
+  if(now-changedAt>=25)strafeButtons=raw;
+}
+
 void updateButton() {
   static int lastRaw=HIGH, stable=HIGH;
   static uint32_t changedAt=0, pressedAt=0;
@@ -546,6 +558,7 @@ void sendFrame(bool valid,float roll,float pitch) {
   if(WiFi.status()!=WL_CONNECTED)return;
   HandheldFrame frame;
   frame.sequence=sequence++;frame.mode=requestedMode==3?1:requestedMode;frame.epoch=modeEpoch;frame.ready=valid?1:0;
+  frame.buttons=frame.mode==1?strafeButtons:0;
   frame.roll=valid?(int16_t)lroundf(roll*10.0f):0;
   frame.pitch=valid?(int16_t)lroundf(pitch*10.0f):0;
   char message[64];
@@ -592,9 +605,11 @@ void updateOled(uint32_t nextControlUs) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("HANDHELD V1.5 THREE MODES / ADS1115 / OLED DIAGNOSTICS");
+  Serial.println("HANDHELD V1.7 / D6 LEFT / D7 RIGHT");
   Serial.setTimeout(5);
   pinMode(kButtonPin,INPUT_PULLUP);
+  pinMode(kStrafeLeftPin,INPUT_PULLUP);
+  pinMode(kStrafeRightPin,INPUT_PULLUP);
   pinMode(LED_BUILTIN,OUTPUT);
   digitalWrite(LED_BUILTIN,HIGH);
 
@@ -622,6 +637,7 @@ void loop() {
   static uint32_t nextSendUs=micros();
   static bool wasConnected=false;
   updateButton();
+  updateStrafeButtons();
   connectToBase();
   bool connected=WiFi.status()==WL_CONNECTED;
   if(wasConnected&&!connected) {

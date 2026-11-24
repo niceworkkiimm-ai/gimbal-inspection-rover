@@ -16,6 +16,7 @@
 /* This enables the trial, not a claim of completed hardware commissioning. */
 #define CAR_MAX_PWM_PERMILLE 300 /* Duty limit, NOT measured speed or current limit. */
 /* Same window for stopping and rearming; no stopped-but-cannot-rearm gap. */
+#define CAR_STRAFE_PWM_PERMILLE 220
 #define CAR_DEADZONE_TENTHS 80
 #define CAR_NEUTRAL_TENTHS 80
 #define CAR_FULL_TILT_TENTHS 300

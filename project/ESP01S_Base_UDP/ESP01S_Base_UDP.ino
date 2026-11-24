@@ -1,7 +1,8 @@
 #include "secrets.h"
-/* V4.12: reverse-return Q1/Q2/Q3 bridge, MCU ACK and browser lease. Wiring unchanged. */
+/* V4.13: forward CRC-checked H2 strafe buttons and legacy H1.
+ * V4.12: reverse-return Q1/Q2/Q3 bridge, MCU ACK and browser lease. Wiring unchanged. */
 /*
- * 固件版本: V4.12
+ * 固件版本: V4.13
  * 当前接线（STM32 V8.17）：ESP TX->PA3(USART2_RX)，RX->PA2(USART2_TX)。
  * 原PA9/PA10信号线撤掉；VCC/EN稳定3.3V、GND共地不变；115200/8N1不变。
  * 本次需重烧基座 ESP；下方旧串口条目为历史。
@@ -206,7 +207,7 @@ footer{min-height:48px;padding:0 20px;display:flex;align-items:center;justify-co
 <body>
 <div class="shell">
 <header class="topbar">
-  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.12</span></p></div></div>
+  <div class="brand"><span class="mark" aria-hidden="true"></span><div><h1>嵌入电团队</h1><p class="subtitle">二维云台控制台 <span class="version">V4.13</span></p></div></div>
   <div id="state" class="state" data-online="false"><i aria-hidden="true"></i><span>等待基座数据</span></div>
 </header>
 <main>

@@ -97,7 +97,7 @@
     function add(point,pos,station,head){
       pos.toArray(positions,positions.length);new T.Color(color(point.distance)).toArray(tints,tints.length);
       scanBounds.expandByPoint(pos);fitPoints.push(pos);
-      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,distance:point.distance,station,head,frontWall:point.frontWall});
+      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,distance:point.distance,station,head,commands:point.commands,stationary:point.stationary,frontWall:point.frontWall});
     }
     function addScan(saved,pose,station){
       for(const p of saved.points){
@@ -127,7 +127,7 @@
       const path=new T.BufferGeometry();path.setAttribute('position',new T.Float32BufferAttribute(line,3));
       scene.add(new T.LineSegments(path,new T.LineBasicMaterial({color:0x78bfff})));
       const marks=new T.Points(gasGeometry(T,route.gasMarks||[]),
-        new T.PointsMaterial({size:7,vertexColors:true,sizeAttenuation:false,depthTest:false}));
+        new T.PointsMaterial({size:4,vertexColors:true,sizeAttenuation:false,depthTest:false}));
       marks.renderOrder=3;scene.add(marks);
       machine.position.set(route.y*400,0,route.x*400);machine.rotation.y=route.heading;
     }else addScan(scan,null,'snapshot');
@@ -153,16 +153,16 @@
       const input=(mode==='front'||mode==='end')
         ?samples.map(p=>mode==='front'||atEnd(p)?{...p,frontWall:true}:p):samples;
       const projection=root.SonarProjection.resolve(input,{
-        raw:raw||(route||scan).dataSource==='simulation'});
-      const result=walls.update(raw?[]:projection.display.filter(p=>!projection.uncertain.has(p)));
+        legacyTravel:true,raw:raw||(route||scan).dataSource==='simulation'});
+      const result=walls.update(raw?[]:projection.display.filter(p=>!projection.uncertain.has(p)&&!projection.excluded.has(p)));
       const remaining=[],attr=cloud.getAttribute('position');
       projection.display.forEach((p,i)=>{
         attr.setXYZ(i,p.x*400,p.y*400,p.z*400);
-        if(!result.covered.has(p)&&!projection.uncertain.has(p))remaining.push(i);
+        if(!projection.excluded.has(p)&&!result.covered.has(p)&&!projection.uncertain.has(p))remaining.push(i);
       });
       attr.needsUpdate=true;drawIndex.array.set(remaining);drawIndex.needsUpdate=true;
       cloud.setDrawRange(0,remaining.length);cloud.computeBoundingSphere();
-      info.textContent=raw?'原始距离沿中心射线显示':'平墙估算 '+projection.corrected+' 点 · 其中俯仰截面补偿 '+projection.pitchCorrected+' 点 · 方向未定 '+projection.uncertain.size+' 点';
+      info.textContent=raw?'原始距离沿中心射线显示':'平墙估算 '+projection.corrected+' 点 · 其中俯仰截面补偿 '+projection.pitchCorrected+' 点 · 方向未定 '+projection.uncertain.size+' 点'+(projection.travel?' · 行驶定向回波 '+projection.travel+' 点已隐藏':'')+(projection.belowFloor?' · 地面以下 '+projection.belowFloor+' 点已隐藏':'');
       render();
     }
     selector.onchange=paintEchoes;paintEchoes();
@@ -232,7 +232,7 @@
     if(route){
       dialog.querySelector('h2').textContent=(route.dataSource==='simulation'?'模拟路线':'巡检路线')+' · 整程三维图';
       dialog.querySelector('#scan-snapshot-meta').textContent=route.distance.toFixed(2)+' m · '+(route.gasMarks||[]).length+' 个气体采样位置';
-      dialog.querySelector('.snapshot-legend').textContent='蓝线为已走路线。气体采样点：绿正常、黄预警、红报警、紫故障、灰数据不全。石纹表示拟合墙面。';
+      dialog.querySelector('.snapshot-legend').textContent='蓝线为已走路线。气体采样点：淡紫正常、金色预警、洋红报警、蓝色故障、灰数据不全。石纹表示拟合墙面。';
     }else if(scan.kind==='3d')dialog.querySelector('.snapshot-legend').textContent+=' 石纹表示拟合墙面。';
     root.dispatchEvent(new CustomEvent('gimbal:snapshot-open'));
     let destroy = () => {}, done = false;

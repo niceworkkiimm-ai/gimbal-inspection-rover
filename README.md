@@ -1,5 +1,7 @@
 # 体感遥控超声波巡检小车
 
+2026-11-24。手持 V1.7 在两种小车模式支持 D6 按住左平移、D7 按住右平移。松开即停车，同时按下也停车。按钮各接对应 GPIO 与 GND。使用横移需配套基座 V4.13 和 STM32 V8.31。网页 V8.31 在车停稳后登记扫描点，气体正常标记为淡紫色，相同状态的采样最小里程间隔为 6 cm。
+
 2026-11-24。网页 V8.30 增加俯仰扫描截面补偿。停车全扫或单独垂直扫描时，网页用连续多层回波拟合局部轮廓，遇距离突跳就结束当前段。既有路线和快照打开即可重算。整程图新增「末站正对平墙」，供操作员确认末站车头正对竖直墙面时使用。
 
 2026-11-24。网页 V8.29 支持三维回波定位和舵机实测角标定。自动估算比较中心射线与有限声束照射竖直平墙的距离变化。长角度近等距、方向未定的回波可切换「原始射线点」查看。停车正对已知平墙时可选择「本站正对平墙」，对能由正前方回波支持的区域估算墙面。实测距离和车辆报警继续使用主控数据。
@@ -22,12 +24,12 @@
 
 | 部分 | 版本 | 正确入口 |
 |---|---|---|
-| STM32 主控 | V8.26 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
-| 基座 ESP-01S | V4.12 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
-| 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
+| STM32 主控 | V8.31 | `project/Gimbal_STLink.uvprojx`，目标 `Gimbal STLink` |
+| 基座 ESP-01S | V4.13 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
+| 手持 NodeMCU V3 CH340G | V1.7 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.5 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
-| 二维网页 | V8.30 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.30 | `project/gimbal-3d-scan.html` |
+| 二维网页 | V8.31 | `project/gimbal-radar-standalone.html` |
+| 三维网页 | V8.31 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
 
@@ -78,7 +80,7 @@ Windows 上双击仓库根目录的 **小车诊断记录.cmd**，再连接小车
 | 气体模块 | R/RX | PC10 / UART4_TX | 9600，8N1 |
 | 气体模块 | T/TX | PC11 / UART4_RX | 9600，8N1 |
 
-基座 VCC、EN 接稳定 3.3V；气体模块按现有 4MZ-HH4 资料接稳定 5V，串口逻辑为 3.3V；与 STM32 共地。手持 I2C：D1/GPIO5=SCL、D2/GPIO4=SDA，MPU6050、OLED、ADS1115 共用；摇杆 SW 接 D5/GPIO14，X/Y 分别接 ADS1115 A0/A1，供电 3.3V。电机、显示屏、编码器及全部供电细节见 `project/User/main.c`。
+基座 VCC、EN 接稳定 3.3V；气体模块按现有 4MZ-HH4 资料接稳定 5V，串口逻辑为 3.3V；与 STM32 共地。手持 I2C：D1/GPIO5=SCL、D2/GPIO4=SDA，MPU6050、OLED、ADS1115 共用；左移按钮接 D6/GPIO12，右移按钮接 D7/GPIO13，另一端各接 GND，使用内部上拉。摇杆 SW 接 D5/GPIO14，X/Y 分别接 ADS1115 A0/A1，供电 3.3V。电机、显示屏、编码器及全部供电细节见 `project/User/main.c`。
 
 ## 开发环境与依赖
 

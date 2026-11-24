@@ -128,7 +128,7 @@ void CarMotor_Init(void)
 void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *data,uint8_t rx_fault)
 {
     uint32_t primask=__get_PRIMASK(),now;
-    uint8_t fresh=0U,ready=0U,allowed,i,centered,was_return,closed_loop,suspect_wheels;
+    uint8_t fresh=0U,ready=0U,buttons=0U,allowed,i,centered,was_return,closed_loop,suspect_wheels;
     uint32_t packet=0U;
     int16_t roll=0,pitch=0;
     int16_t demand[4],output[4];
@@ -151,7 +151,7 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
        (uint32_t)(DWT->CYCCNT-data->arrival_cycles)<=
        (SystemCoreClock/1000U)*CAR_LINK_TIMEOUT_MS)
     {
-        fresh=1U;ready=data->ready;packet=data->packet_count;
+        fresh=1U;ready=data->ready;buttons=data->buttons;packet=data->packet_count;
         roll=(int16_t)(data->roll*10.0f);pitch=(int16_t)(data->pitch*10.0f);
         sample_cycles=data->arrival_cycles;
     }
@@ -166,7 +166,7 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
           (uint32_t)(now-return_lease_ms)>RETURN_BROWSER_TIMEOUT_MS?RETURN_BROWSER:RETURN_LINK);
         CarLogic_Stop(&car,now,CAR_LINK_LOST);lease_lost=0U;
     }
-    centered=(uint8_t)(roll-CAR_ROLL_ZERO_TENTHS<=CAR_NEUTRAL_TENTHS&&
+    centered=(uint8_t)(!buttons&&roll-CAR_ROLL_ZERO_TENTHS<=CAR_NEUTRAL_TENTHS&&
         roll-CAR_ROLL_ZERO_TENTHS>=-CAR_NEUTRAL_TENTHS&&
         pitch-CAR_PITCH_ZERO_TENTHS<=CAR_NEUTRAL_TENTHS&&
         pitch-CAR_PITCH_ZERO_TENTHS>=-CAR_NEUTRAL_TENTHS);
@@ -177,9 +177,9 @@ void CarMotor_Service(WirelessControlMode_t mode,const WirelessControlData_t *da
     if(return_path.stop_requested){
         return_path.stop_requested=0;CarLogic_Stop(&car,now,CAR_NEUTRAL);
     }
-    CarLogic_Step(&car,now,(uint8_t)(mode==WIRELESS_MODE_CAR),
+    CarLogic_StepWithButtons(&car,now,(uint8_t)(mode==WIRELESS_MODE_CAR),
                    (uint8_t)CAR_RUNTIME_ENABLE,(uint8_t)!latched_fault,
-                   rx_fault,fresh,ready,packet,roll,pitch);
+                   rx_fault,fresh,ready,packet,roll,pitch,buttons);
     allowed=(uint8_t)(active&&!latched_fault&&!lease_lost&&fresh&&ready&&
                       car.state!=CAR_FAULT&&car.armed&&!car.paused);
     for(i=0;i<4;i++)demand[i]=car.pwm[i];

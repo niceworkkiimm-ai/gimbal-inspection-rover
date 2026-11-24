@@ -306,7 +306,7 @@ void WirelessControl_Poll(void)
             RouteLog_Query(line.data,line.length);
             continue;
         }
-        if (line.length>=3U && line.data[0]=='H' && line.data[1]=='1' && line.data[2]==',')
+        if (line.length>=3U && line.data[0]=='H' && (line.data[1]=='1' || line.data[1]=='2') && line.data[2]==',')
         {
             if (!HH_Parse(line.data,line.length,&hand)) { rx_fault=1U;continue; }
             extended=1U;sequence=hand.sequence;
@@ -336,6 +336,7 @@ void WirelessControl_Poll(void)
             }
         }
         latest_data.protocol=extended;
+        latest_data.buttons=extended?hand.buttons:0U;
         latest_data.ready=extended?hand.ready:1U;
         latest_data.requested_mode=extended?hand.mode:0U;
         latest_data.mode_epoch=extended?hand.epoch:0U;
