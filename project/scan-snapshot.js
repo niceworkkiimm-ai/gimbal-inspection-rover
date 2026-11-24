@@ -59,7 +59,20 @@
     return () => observer.disconnect();
   }
 
-  function show3D(host, scan) {
+  function gasGeometry(T,marks){
+    const xyz=[],colors=[];
+    // Draw exceptional readings last so a return over the same spot retains the alert.
+    for(const alert of [false,true])for(const m of marks){
+      if(['warning','alarm','fault'].includes(m.level)!==alert)continue;
+      xyz.push(m.y*400,alert?9:5,m.x*400);
+      new T.Color(root.RouteGas.colors[m.level]).toArray(colors,colors.length);
+    }
+    const g=new T.BufferGeometry();
+    g.setAttribute('position',new T.Float32BufferAttribute(xyz,3));
+    g.setAttribute('color',new T.Float32BufferAttribute(colors,3));
+    return g;
+  }
+  function show3D(host, scan,route) {
     const T = root.THREE;
     if (!T || !T.OrbitControls || !root.GimbalModel || typeof root.GimbalModel.create !== 'function')
       throw Error('三维回看组件未加载，请保留同目录的 three.min.js、OrbitControls.umd.js、rover-model-data.js 和 gimbal-model.js。');
@@ -77,22 +90,46 @@
     const key = new T.DirectionalLight(0xd8fff0, 1.5); key.position.set(90, 170, 120); scene.add(key);
     // Each view owns its model resources; closing a saved scan never disposes the live model.
     const {machine, pointAt} = root.GimbalModel.create(T); scene.add(machine);
-    const geometry = new T.SphereGeometry(2, 12, 8), materials = new Map();
     const scanBounds=new T.Box3().setFromObject(machine),fitPoints=[];
     const {min,max}=scanBounds;
     for(const x of [min.x,max.x])for(const y of [min.y,max.y])for(const z of [min.z,max.z])fitPoints.push(new T.Vector3(x,y,z));
-    scan.points.forEach(point => {
-      const tint = color(point.distance);
-      if (!materials.has(tint)) materials.set(tint, new T.MeshBasicMaterial({color: tint}));
-      const mesh = new T.Mesh(geometry, materials.get(tint));
-      const distance = point.distance;
-      if(point.position)mesh.position.fromArray(point.position).multiplyScalar(400);
-      else mesh.position.copy(pointAt(distance * 4, point.yaw, point.pitch));
-      scene.add(mesh);
-      scanBounds.expandByPoint(mesh.position);
-      fitPoints.push(mesh.position.clone());
-    });
-    const worldSnapshot=scan.points.some(point=>point.position);
+    const positions=[],tints=[],samples=[];
+    function add(point,pos,station){
+      pos.toArray(positions,positions.length);new T.Color(color(point.distance)).toArray(tints,tints.length);
+      scanBounds.expandByPoint(pos);fitPoints.push(pos);
+      samples.push({x:pos.x/400,y:pos.y/400,z:pos.z/400,yaw:point.yaw,pitch:point.pitch,station});
+    }
+    function addScan(saved,pose,station){
+      for(const p of saved.points){
+        const pos=p.position?new T.Vector3(...p.position).multiplyScalar(400):pointAt(p.distance*4,p.yaw,p.pitch);
+        if(pose)pos.applyAxisAngle(new T.Vector3(0,1,0),pose.heading).add(new T.Vector3(pose.y*400,0,pose.x*400));
+        add(p,pos,p.station||station);
+      }
+    }
+    if(route){
+      if(route.worldCloud)for(const p of route.worldCloud)add(p,new T.Vector3(p.x,p.y,p.z).multiplyScalar(400),p.station);
+      else for(const checkpoint of route.scans||[])if(checkpoint.scan.kind==='3d')
+        addScan(checkpoint.scan,checkpoint.pose,'scan'+checkpoint.id);
+      const line=[];
+      route.points.forEach((p,i)=>{
+        const pos=new T.Vector3(p.y*400,2,p.x*400);scanBounds.expandByPoint(pos);fitPoints.push(pos);
+        if(i&&!p.gap)line.push(route.points[i-1].y*400,2,route.points[i-1].x*400,pos.x,pos.y,pos.z);
+      });
+      const path=new T.BufferGeometry();path.setAttribute('position',new T.Float32BufferAttribute(line,3));
+      scene.add(new T.LineSegments(path,new T.LineBasicMaterial({color:0x78bfff})));
+      const marks=new T.Points(gasGeometry(T,route.gasMarks||[]),
+        new T.PointsMaterial({size:7,vertexColors:true,sizeAttenuation:false,depthTest:false}));
+      marks.renderOrder=3;scene.add(marks);
+      machine.position.set(route.y*400,0,route.x*400);machine.rotation.y=route.heading;
+    }else addScan(scan,null,'snapshot');
+    const cloud=new T.BufferGeometry();
+    cloud.setAttribute('position',new T.Float32BufferAttribute(positions,3));
+    cloud.setAttribute('color',new T.Float32BufferAttribute(tints,3));
+    scene.add(new T.Points(cloud,new T.PointsMaterial({size:4,vertexColors:true,sizeAttenuation:false})));
+    const walls=root.ScanWalls.layer(T,400),wallResult=walls.update(samples);
+    const remaining=[];samples.forEach((p,i)=>{if(!wallResult.covered.has(p))remaining.push(i);});
+    cloud.setIndex(remaining);scene.add(walls.mesh);
+    const worldSnapshot=route||scan.points.some(point=>point.position);
     const render = () => renderer.render(scene, camera);
     const resize = () => {
       const rect = host.getBoundingClientRect(), w = Math.max(1, rect.width), h = Math.max(1, rect.height);
@@ -112,6 +149,7 @@
     const observer = new ResizeObserver(resize); observer.observe(host); resize();
     // A static saved scene renders only on resize/interaction; no animation loop is needed.
     return () => {
+      scene.remove(walls.mesh);walls.dispose();
       observer.disconnect(); controls.removeEventListener('change', render); controls.dispose();
       const geometries = new Set(), allMaterials = new Set();
       scene.traverse(object => {
@@ -122,10 +160,10 @@
     };
   }
 
-  function open(checkpoint) {
+  function open(checkpoint,route) {
     if (dismiss) dismiss();
     const scan = checkpoint.scan;
-    if (!scan || !['2d', '3d'].includes(scan.kind) || !Array.isArray(scan.points) || !scan.points.length)
+    if (!scan || !['2d', '3d'].includes(scan.kind) || !Array.isArray(scan.points) || (!route && !scan.points.length))
       throw Error('这个路线点没有可回看的扫描快照。');
     let previousFocus = document.activeElement;
     while (previousFocus && previousFocus.shadowRoot && previousFocus.shadowRoot.activeElement) previousFocus = previousFocus.shadowRoot.activeElement;
@@ -155,6 +193,11 @@
     dialog.querySelector('.snapshot-legend').textContent = '红色 <20 cm · 黄色 20–40 cm · 绿色 40–400 cm。' +
       (scan.kind === '3d' ? (scan.points.some(p=>p.position)?'图中障碍点保留采集位置。':'')+'拖动旋转，滚轮或双指缩放。' : '') +
       (scan.dataSource==='simulation'?'已保存的地貌扫描点图。':'这是保存时的只读快照。');
+    if(route){
+      dialog.querySelector('h2').textContent=(route.dataSource==='simulation'?'模拟路线':'巡检路线')+' · 整程三维图';
+      dialog.querySelector('#scan-snapshot-meta').textContent=route.distance.toFixed(2)+' m · '+(route.gasMarks||[]).length+' 个气体采样位置';
+      dialog.querySelector('.snapshot-legend').textContent='蓝线为已走路线。气体采样点：绿正常、黄预警、红报警、紫故障、灰数据不全。石纹表示拟合墙面。';
+    }else if(scan.kind==='3d')dialog.querySelector('.snapshot-legend').textContent+=' 石纹表示拟合墙面。';
     root.dispatchEvent(new CustomEvent('gimbal:snapshot-open'));
     let destroy = () => {}, done = false;
     const finish = () => {
@@ -165,9 +208,12 @@
     const close = () => { dialog.close(); finish(); };
     dismiss = close; dialog.querySelector('button').addEventListener('click', close); dialog.addEventListener('close', finish, {once: true});
     document.body.append(dialog); dialog.showModal();
-    try { destroy = scan.kind === '3d' ? show3D(dialog.querySelector('.snapshot-view'), scan) : show2D(dialog.querySelector('.snapshot-view'), scan); }
+    try { destroy = scan.kind === '3d' ? show3D(dialog.querySelector('.snapshot-view'), scan,route) : show2D(dialog.querySelector('.snapshot-view'), scan); }
     catch (error) { close(); throw error; }
     return dialog;
   }
-  root.ScanSnapshotViewer = {open};
+  root.ScanSnapshotViewer = {open,gasGeometry,openMap(route){
+    if(!route?.points?.length)throw Error('还没有路线可查看。');
+    return open({id:0,capturedAt:route.originTime,pose:route,scan:{kind:'3d',points:[]}},route);
+  }};
 })(typeof globalThis !== 'undefined' ? globalThis : this);

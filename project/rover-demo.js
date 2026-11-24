@@ -198,6 +198,22 @@
     return {kind:'3d',dataSource:SOURCE,points,view:{camera:[460,330,600],target:[0,95,150]}};
   }
 
+  function demoGases(sample) {
+    const gasTime=sample.time*.12;
+    const gases=[{name:'甲烷 CH₄',unit:'%LEL',concentration:1.2+.25*Math.sin(gasTime)},
+      {name:'氧气 O₂',unit:'%VOL',concentration:20.8+.06*Math.sin(gasTime*.8)},
+      {name:'一氧化碳 CO',unit:'ppm',concentration:2.1+.4*Math.sin(gasTime*.6)},
+      {name:'硫化氢 H₂S',unit:'ppm',concentration:.15+.03*Math.sin(gasTime)}]
+      .map((g,i)=>({...g,channel:i+1,online:true,valid:true,statusText:'正常',severity:'normal'}));
+    // The third inspection stop is a labelled, synthetic CO alarm in offline playback.
+    if(sample.phase==='scan' && sample.station===2){
+      const alarm=sample.phaseProgress>=0.35;
+      Object.assign(gases[2],{severity:alarm?'alarm':'warning',statusText:alarm?'模拟报警':'模拟预警',
+        concentration:alarm?46:28});
+    }
+    return gases;
+  }
+
   function makeScenario() {
     const scans=STATIONS.map((_,i)=>makeScan(i)),objects=obstacleMap(),phases=[],plans=[];
     let time=0,pose={x:0,y:0,heading:Math.atan2(STATIONS[0].position[1],STATIONS[0].position[0])};
@@ -256,6 +272,13 @@
         raw:travel.map((value,i)=>Math.round(value/tickM)*CONFIG.signs[i])});
       previous=position;
     }
+    const gas=root.RouteGas || require('./route-gas.js');
+    const gasMarks=[];
+    for(const p of samples){
+      const r=gas.summarize(demoGases(p)),last=gasMarks.at(-1);
+      if(last && last.level===r.level && p.distance-last.distance<.12)continue;
+      gasMarks.push({x:p.x,y:p.y,time:p.time*1000,distance:p.distance,level:r.level,detail:r.detail});
+    }
     const sampleAt=t=>samples[Math.min(samples.length-1,Math.floor(clamp(t,0,duration)/step))];
     const checkpoints=phases.filter(p=>p.type==='scan').map((p,i)=>({
       id:i+1,label:STATIONS[i].name,at:p.end,
@@ -267,7 +290,7 @@
       const s=sampleAt(t),elapsed=s.time*1000;
       const leg=s.phase==='scan'?Math.min(5,s.leg+1):s.leg;
       return {x:s.x,y:s.y,heading:s.heading,distance:s.distance,elapsed,originTime:origin,
-        session:'simulation-offline-v2',gaps:0,restarts:0,decimations:0,
+        gasMarks:gasMarks.filter(m=>m.time<=elapsed),session:'simulation-offline-v2',gaps:0,restarts:0,decimations:0,
         config:{...CONFIG,signs:CONFIG.signs.slice()},dataSource:SOURCE,plan:plans[leg],
         points:samples.filter(p=>p.time<=s.time).map((p,i)=>({
           x:p.x,y:p.y,heading:p.heading,time:p.time*1000,distance:p.distance,gap:i===0
@@ -327,12 +350,7 @@
     }
     const point=scanning?scenario.scans[s.station].points[shownPoints[s.station]-1]:scenario.readingAt(s);
     const sequence=Math.floor(demo.time*1000)+demo.epoch*1000000;
-    const gasTime=demo.time*.12;
-    const gases=[{name:'甲烷 CH₄',unit:'%LEL',concentration:1.2+.25*Math.sin(gasTime)},
-      {name:'氧气 O₂',unit:'%VOL',concentration:20.8+.06*Math.sin(gasTime*.8)},
-      {name:'一氧化碳 CO',unit:'ppm',concentration:2.1+.4*Math.sin(gasTime*.6)},
-      {name:'硫化氢 H₂S',unit:'ppm',concentration:.15+.03*Math.sin(gasTime)}]
-      .map((g,i)=>({...g,channel:i+1,online:true,valid:true,statusText:'正常',severity:'normal'}));
+    const gases=demoGases(s);
     const rpm=s.rpm.map(n=>Math.round(n*10));
     const wheelSpeed={protocol:1,online:true,valid:true,enabled:false,sequence,ageMs:0,
       targetRpm10:[0,0,0,0],measuredRpm10:rpm,pwm:s.rpm.map(n=>Math.round(clamp(n*3,-300,300))),

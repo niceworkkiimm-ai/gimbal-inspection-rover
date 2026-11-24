@@ -7,6 +7,7 @@
  */
 (function (root) {
   'use strict';
+  const gas=root.RouteGas || require('./route-gas.js');
   const u32 = n => Number.isInteger(n) && n >= 0 && n <= 4294967295;
   const wrapDelta = (a, b) => (a - b) | 0;
   const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -35,9 +36,10 @@
       this.restarts=0; this.decimations=0; this.travel=[0,0,0,0];
       this.last=null; this.originTime=Math.max(Date.now(),(this.originTime||0)+1); this.breakNext=true;
       this.pendingWheel=[0,0,0,0];this.pendingMs=0;this.pendingBad=false;
-      this.poseHistory=[];
+      this.poseHistory=[];this.poseReceivedAt=0;this.gasMarks=[];this.gasKey=null;this.gasDropped=0;
     }
-    rememberPose(ms, gap) {
+    rememberPose(ms, gap, now=Date.now()) {
+      this.poseReceivedAt=now;
       this.poseHistory.push({ms, x:this.x, y:this.y, heading:this.heading, gap});
       if(this.poseHistory.length>64)this.poseHistory.shift();
     }
@@ -159,6 +161,16 @@
   // ponytail: bound in-memory inspection files; split long surveys into route files.
   const MAX_SCANS=100,MAX_SCAN_POINTS=800;
   const finite=(v,low,high)=>typeof v==='number'&&Number.isFinite(v)&&v>=low&&v<=high;
+  const validStation=s=>typeof s==='string' && /^[0-9,:-]{1,80}$/.test(s);
+  function cleanCloud(points){
+    if(!Array.isArray(points)||points.length>6000)throw Error('整程点云数量无效。');
+    return points.map(p=>{
+      if(!p||!finite(p.x,-1e6,1e6)||!finite(p.y,-10,10)||!finite(p.z,-1e6,1e6)||
+        !finite(p.pitch,-180,180)||!finite(p.yaw,-180,180)||!finite(p.distance,2,400)||!validStation(p.station))
+        throw Error('整程点云格式无效。');
+      return {x:p.x,y:p.y,z:p.z,yaw:p.yaw,pitch:p.pitch,distance:p.distance,station:p.station};
+    });
+  }
   function cleanScan(scan){
     const check=ok=>{if(!ok)throw Error('扫描点图格式不正确或数据超出范围。');};
     check(scan&&(scan.kind==='2d'||scan.kind==='3d')&&Array.isArray(scan.points)&&
@@ -166,6 +178,7 @@
     const points=scan.points.map(p=>{
       check(p&&finite(p.distance,2,400)&&finite(p.yaw,-180,180)&&finite(p.pitch,-180,180));
       const point={distance:p.distance,yaw:p.yaw,pitch:p.pitch};
+      if(p.station!==undefined){check(validStation(p.station));point.station=p.station;}
       if(p.position!==undefined){
         check(scan.kind==='3d'&&Array.isArray(p.position)&&p.position.length===3&&
           p.position.every(v=>finite(v,-10,10)));
@@ -238,6 +251,9 @@
     const copy={x:r.x,y:r.y,heading:r.heading,distance:r.distance,elapsed:r.elapsed,originTime:r.originTime,
       session:r.session,gaps:r.gaps,restarts:r.restarts,decimations:r.decimations,points,scans:cleanScans(r.scans,r),
       config:{diameter:c.diameter,cpr:c.cpr,track:c.track,wheelbase:c.wheelbase,confirmed:true,signs:c.signs.slice()}};
+    if(r.gasMarks!==undefined)copy.gasMarks=gas.clean(r.gasMarks,r);
+    if(r.gasDropped){check(Number.isSafeInteger(r.gasDropped)&&r.gasDropped>=0);copy.gasDropped=r.gasDropped;}
+    if(r.worldCloud!==undefined)copy.worldCloud=cleanCloud(r.worldCloud);
     if(r.dataSource==='simulation'){
       copy.dataSource='simulation';
       copy.scans.forEach(s=>{s.scan.dataSource='simulation';});
@@ -316,6 +332,8 @@
       <header><div><h2>巡检行驶轨迹</h2><p>四轮编码器 · 相对起点的平面路线</p></div><span id="state" class="tag">等待编码器数据</span></header>
       <div class="files"><button id="saveRoute" class="primary">保存路线</button><button id="openRoute">打开路线</button><button id="liveRoute" hidden>返回实时</button><span id="routeFileStatus" class="file-status" role="status">当前路线</span><input id="routeFile" type="file" accept=".json,application/json" hidden></div>
       <div class="snapshots"><button id="saveScan">保存当前扫描点</button><label><span class="scan-dot">●</span> 扫描点<select id="scanSelect" aria-label="已保存扫描点"><option value="">暂无扫描点</option></select></label><button id="viewScan" disabled>查看点图</button><small id="scanStatus" role="status">停车完成所需扫描后保存，点击路线红点回看。</small></div>
+      <div class="snapshots"><button id="viewMap">查看整程三维图</button><span>气体采样点 · 绿 正常 / 黄 预警 / 红 报警 / 紫 故障 / 灰 数据不全</span></div>
+      <div class="note" id="gasMessage" role="status"></div><div class="note" id="gasInspect" hidden></div>
       <div class="body">
         <div class="map"><canvas id="map" aria-label="小车编码器估算行驶轨迹图"></canvas><div class="map-hint" id="hint">起点朝上 · 左为车体左侧 · 拖动平移 / 滚轮缩放</div>
           <div class="toolbar"><button id="fit">查看全程</button><button id="follow" aria-pressed="true">跟随小车：开</button><button id="zoomIn" aria-label="放大轨迹">＋</button><button id="zoomOut" aria-label="缩小轨迹">－</button><button id="reset">以当前位置重新开始</button><button id="export">导出轨迹</button></div>
@@ -356,6 +374,14 @@
   else document.body.appendChild(host);
   const canvas=$('map'),ctx=canvas.getContext('2d');
   let scale=85,center={x:0,y:0},follow=true,drag=null,dirty=true,lastPaint=0;
+  let cloudCapture=null,liveGas=null;
+  function describeMark(m){return m.distance.toFixed(2)+' m · '+gas.labels[m.level]+(m.detail?' · '+m.detail:'');}
+  function routeWithCloud(){
+    const route=shownRoute();
+    return !historyRoute&&cloudCapture?{...route,worldCloud:cloudCapture()}:route;
+  }
+  $('viewMap').onclick=()=>{try{root.ScanSnapshotViewer.openMap(routeWithCloud());}
+    catch(err){$('gasMessage').textContent=err.message;}};
   let historyRoute=null,demoRoute=null,saveDirectory=null,saving=false,opening=false;
   let scanCapture=null,selectedScan=0,scanListRoute=null,scanListLength=-1;
   const shownRoute=()=>historyRoute||demoRoute||engine;
@@ -369,6 +395,14 @@
     $('liveRoute').hidden=!historyRoute;
     $('saveScan').disabled=!!historyRoute||!!demoRoute||!scanCapture;
     refreshScans(shown);
+    const marks=shown.gasMarks||[], latest=marks.at(-1);
+    const current=(!historyRoute&&!demoRoute)?liveGas:latest;
+    const warning=marks.findLast(m=>['warning','alarm','fault'].includes(m.level));
+    const message=(current?'气体 · '+gas.labels[current.level]+(current.detail?' · '+current.detail:''):(marks.length?'当前无实时气体数据 · 已保留沿线采样':'本路线暂无气体记录'))+
+      (warning?' ｜ 最近异常 '+describeMark(warning):'')+(shown.gasDropped?' ｜ 较早采样已达保存上限':'');
+    if($('gasMessage').textContent!==message)$('gasMessage').textContent=message;
+    $('gasMessage').style.color=current?gas.colors[current.level]:'';
+    $('viewMap').disabled=!shown.points.length;
     $('state').className='tag'+(live&&calibrated?' live':'');
     $('distance').textContent=calibrated?fixed(shown.distance):'--';
     $('away').textContent=(calibrated?fixed(Math.hypot(shown.x,shown.y)):'--')+' m';
@@ -447,8 +481,15 @@
       ctx.fillText('已预填尺寸 · 确认四轮方向后开始绘图',w/2,h/2-6);
       ctx.font='12px "Microsoft YaHei",sans-serif';ctx.fillStyle='#819d8b';ctx.fillText('先检查四个轮子的累计计数',w/2,h/2+22);ctx.textAlign='left';return;
     }
-    ctx.lineWidth=2.5;ctx.strokeStyle='#62d8a0';ctx.lineJoin='round';ctx.beginPath();
+    ctx.lineWidth=2.5;ctx.strokeStyle='#7394b8';ctx.lineJoin='round';ctx.beginPath();
     shown.points.forEach((p,i)=>{const q=screen(p.x,p.y);if(i===0||p.gap)ctx.moveTo(q.x,q.y);else ctx.lineTo(q.x,q.y);});ctx.stroke();
+    const marks=shown.gasMarks||[];
+    function plotMark(m){
+      const q=screen(m.x,m.y),important=['alarm','warning','fault'].includes(m.level);
+      ctx.fillStyle=gas.colors[m.level];ctx.beginPath();ctx.arc(q.x,q.y,important?5:3,0,Math.PI*2);ctx.fill();
+    }
+    marks.forEach(m=>{if(m.level==='normal'||m.level==='unknown')plotMark(m);});
+    marks.forEach(m=>{if(m.level!=='normal'&&m.level!=='unknown')plotMark(m);});
     if(shown.points.length){const p=shown.points[0],q=screen(p.x,p.y);ctx.fillStyle='#8aa6ff';ctx.beginPath();ctx.arc(q.x,q.y,5,0,Math.PI*2);ctx.fill();ctx.fillText('起点',q.x+9,q.y+4);}
     const car=screen(shown.x,shown.y);
     ctx.save();ctx.translate(car.x,car.y);ctx.rotate(-shown.heading);
@@ -485,7 +526,7 @@
   function restart(){
     if(historyRoute)return;
     if(engine.scans.length&&!root.confirm('重新开始会清空当前路线和扫描点。请先保存路线。仍要继续吗？'))return;
-    engine.reset();center={x:0,y:0};
+    engine.reset();$('gasInspect').hidden=true;center={x:0,y:0};
     selectedScan=0;$('scanStatus').textContent='已重新开始，当前路线暂无扫描点。';
     if(root.RouteLogClient)root.RouteLogClient.reset();
     refresh();
@@ -503,7 +544,16 @@
     const r=canvas.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
     const hit=[...(shownRoute().scans||[])].reverse().find(s=>Math.hypot(
       r.width/2-(s.pose.y-center.y)*scale-px,r.height/2-(s.pose.x-center.x)*scale-py)<=14);
-    if(hit)showScan(hit.id);
+    if(hit){showScan(hit.id);return;}
+    const nearby=(shownRoute().gasMarks||[]).map(m=>({m,d:Math.hypot(
+      r.width/2-(m.y-center.y)*scale-px,r.height/2-(m.x-center.x)*scale-py)})).filter(v=>v.d<=11)
+      .sort((a,b)=>a.d-b.d||b.m.time-a.m.time);
+    const details=$('gasInspect');details.hidden=!nearby.length;
+    if(nearby.length){
+      const nearest=nearby[0],overlap=nearby.filter(v=>Math.hypot(v.m.x-nearest.m.x,v.m.y-nearest.m.y)<.025);
+      const alert=overlap.find(v=>v.m.level==='alarm'||v.m.level==='warning');
+      details.textContent='选中采样 · '+describeMark(nearest.m)+(alert&&alert!==nearest?' ｜ 此处曾出现 '+describeMark(alert.m):'');
+    }
   };
   canvas.onpointercancel=()=>{drag=null;};
   $('export').onclick=()=>{
@@ -524,7 +574,7 @@
       if(!validConfig(shownRoute().config)||!shownRoute().points.length)throw new Error('暂无已标定路线可保存。');
       if(!historyRoute&&!demoRoute&&engine.nativeLog&&(engine.logPending||!engine.online||Date.now()-engine.lastReceived>1200))
         throw new Error('路线尚未同步完成，请先停车并等待“车端记录已同步”后保存。');
-      text=JSON.stringify(routeRecord(shownRoute()),null,2);
+      text=JSON.stringify(routeRecord(routeWithCloud()));
       if(new TextEncoder().encode(text).length>MAX_ROUTE_BYTES)throw Error('路线与扫描点超过20MB，请缩短本次记录。');
     }catch(e){$('routeFileStatus').textContent=e.message;return;}
     const suffix=root.crypto&&root.crypto.randomUUID?root.crypto.randomUUID():Math.random().toString(36).slice(2);
@@ -567,13 +617,13 @@
     try{
       if(file.size>MAX_ROUTE_BYTES)throw new Error('路线文件不能超过20MB。');
       const route=parseRouteFile(await file.text());
-      historyRoute=route;refresh();fitRoute();$('routeFileStatus').textContent=file.name;
+      historyRoute=route;$('gasInspect').hidden=true;refresh();fitRoute();$('routeFileStatus').textContent=file.name;
       $('scanStatus').textContent='已打开 '+route.scans.length+' 个扫描点，点击红点或选择编号回看。';
     }catch(e){$('routeFileStatus').textContent='打开失败：'+e.message;}
     finally{opening=false;$('openRoute').disabled=false;$('liveRoute').disabled=false;}
   };
   $('liveRoute').onclick=()=>{
-    historyRoute=null;follow=true;$('follow').textContent='跟随小车：开';$('follow').setAttribute('aria-pressed','true');
+    historyRoute=null;$('gasInspect').hidden=true;follow=true;$('follow').textContent='跟随小车：开';$('follow').setAttribute('aria-pressed','true');
     $('routeFileStatus').textContent='当前路线';refresh();
     $('scanStatus').textContent='当前路线保留 '+engine.scans.length+' 个扫描点，点击“保存路线”写入文件。';
   };
@@ -601,18 +651,21 @@
       refresh();
     },
     openDemoScan(id){if(demoRoute)showScan(id);},
+    setCloudCapture(fn){cloudCapture=fn;},
     setScanCapture(fn){scanCapture=fn;refresh();},
-    feed(odo){
+    feed(odo,frame){
       if(engine.nativeLog){
         rawEngine.config=engine.config;rawEngine.feed(odo);
         engine.raw=rawEngine.raw.slice();engine.rpm=rawEngine.rpm.slice();
       }else engine.feed(odo);
+      liveGas=frame?.online===true?gas.summarize(frame.gases):null;
+      if(liveGas && odo?.online===true)gas.observe(engine,liveGas);
       refresh();
     },
     enableLog(){engine.nativeLog=true;engine.logPending=true;},
     legacyLog(){
       engine.nativeLog=false;engine.logPending=false;
-      if(!engine.scans.length)engine.reset();
+      if(!engine.scans.length&&!engine.gasMarks.length)engine.reset();
       else{
         // A disappearing log endpoint must not erase unsaved inspection snapshots.
         engine.last=null;engine.poseHistory.length=0;
@@ -622,7 +675,7 @@
       refresh();
     },
     refresh,
-    disconnect(){engine.online=false;engine.speed=0;refresh();},
+    disconnect(){liveGas=null;engine.online=false;engine.speed=0;refresh();},
     selectedRoute:()=>historyRoute?cleanRoute(historyRoute):null,
     restart,engine
   };
