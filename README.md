@@ -1,5 +1,7 @@
 # 体感遥控超声波巡检小车
 
+2026-11-24。网页 V8.30 增加俯仰扫描截面补偿。停车全扫或单独垂直扫描时，网页用连续多层回波拟合局部轮廓，遇距离突跳就结束当前段。既有路线和快照打开即可重算。整程图新增「末站正对平墙」，供操作员确认末站车头正对竖直墙面时使用。
+
 2026-11-24。网页 V8.29 支持三维回波定位和舵机实测角标定。自动估算比较中心射线与有限声束照射竖直平墙的距离变化。长角度近等距、方向未定的回波可切换「原始射线点」查看。停车正对已知平墙时可选择「本站正对平墙」，对能由正前方回波支持的区域估算墙面。实测距离和车辆报警继续使用主控数据。
 
 2026-11-24。网页 V8.28 改善了墙面连续性。实时地图和三维快照按相邻扫描行的重叠范围拼接，小缺测与孤立跳点可由邻近回波提供支持。较宽的无回波区域和明显深度突变保留空隙。
@@ -24,8 +26,8 @@
 | 基座 ESP-01S | V4.12 | `project/ESP01S_Base_UDP/ESP01S_Base_UDP.ino` |
 | 手持 NodeMCU V3 CH340G | V1.6 | `project/NodeMCU_Handheld_MPU_Car/NodeMCU_Handheld_MPU_Car.ino` |
 | AI Thinker ESP32-CAM | V1.5 | `project/ESP32CAM_Camera/ESP32CAM_Camera.ino` |
-| 二维网页 | V8.29 | `project/gimbal-radar-standalone.html` |
-| 三维网页 | V8.29 | `project/gimbal-3d-scan.html` |
+| 二维网页 | V8.30 | `project/gimbal-radar-standalone.html` |
+| 三维网页 | V8.30 | `project/gimbal-3d-scan.html` |
 
 `ESP01S_Handheld_MPU_UDP`、`ESP8266_Firmware`、`ESP32S3_Camera`、`MiniProgram` 和 `web-dashboard` 保留为历史/辅助资料，不是当前整机烧录组合。特别是当前摄像头实物为普通 ESP32-CAM，不要烧录 S3 目录。历史版本说明及 ESP 文件头部分接线尚为旧版，当前接线以本 README 和 `project/User/main.c` 顶部完整接线表为准。
 

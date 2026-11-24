@@ -38,7 +38,14 @@
       bins.get(key).push(r);
     }
     const samples=Array.from(bins.values(),v=>v.sort((a,b)=>a.r-b.r)[v.length>>1]);
-    if(samples.length<(explicit?4:12))return null;
+    if(samples.length<(explicit?4:12)){
+      // Vertical-only scan. The centre return anchors a user-confirmed wall.
+      const central=group.filter(r=>Math.abs(r.p.yaw)<=3&&Math.abs(r.p.pitch)<=2.5);
+      if(!explicit||!central.length||new Set(group.map(r=>Math.round(r.p.pitch/5))).size<7)return null;
+      const heading=central[0].p.head,view=orientation(central,heading);
+      const range=median(central.map(r=>r.r)),level=median(view.map(v=>v.origin+v.ray.r*v.cosine));
+      return {heading,level,range,eps:.009+.012*range,width:12*rad,explicit:true};
+    }
     const head=group[0].p.head;
     let best=null,ambiguous=null;
     for(const offset of (explicit?[0]:[0,-12,12,-24,24])){
@@ -80,24 +87,25 @@
     return best||ambiguous;
   }
 
-  function flatRangeRuns(group){
+  function flatRangeRuns(group,vertical=false){
     // A wall can occupy just one side of a sweep. Look for repeatable constant-radius
     // runs locally, without combining measurements from opposite sides of a doorway.
     const rows=new Map(),ambiguous=new Set();
     for(const r of group){
-      const pitch=Math.round(r.p.pitch/2.5),yaw=Math.round(r.p.yaw/2);
-      if(!rows.has(pitch))rows.set(pitch,new Map());
-      const row=rows.get(pitch);
-      if(!row.has(yaw))row.set(yaw,[]);
-      row.get(yaw).push(r);
+      const slice=vertical?Math.round(r.p.yaw/5):Math.round(r.p.pitch/2.5);
+      const angle=Math.round((vertical?r.p.pitch:r.p.yaw)/2);
+      if(!rows.has(slice))rows.set(slice,new Map());
+      const row=rows.get(slice);
+      if(!row.has(angle))row.set(angle,[]);
+      row.get(angle).push(r);
     }
     for(const row of rows.values()){
-      const bins=[...row].sort((a,b)=>a[0]-b[0]).map(([yaw,rays])=>({yaw:yaw*2,rays,r:median(rays.map(v=>v.r))}));
+      const bins=[...row].sort((a,b)=>a[0]-b[0]).map(([k,rays])=>({angle:k*2,rays,r:median(rays.map(v=>v.r))}));
       for(let i=0;i<bins.length;i++){
         let j=i+1;
-        while(j<bins.length&&bins[j].yaw-bins[j-1].yaw<=8&&bins[j-1].yaw-bins[i].yaw<30)j++;
+        while(j<bins.length&&bins[j].angle-bins[j-1].angle<=8&&bins[j-1].angle-bins[i].angle<30)j++;
         const last=j-1;
-        if(last-i<6||bins[last].yaw-bins[i].yaw<30)continue;
+        if(last-i<6||bins[last].angle-bins[i].angle<30)continue;
         const window=bins.slice(i,j),r=median(window.map(b=>b.r)),tol=Math.max(.004,r*.010);
         if(window.filter(b=>Math.abs(b.r-r)<=tol).length<window.length*.85)continue;
         for(const bin of window)for(const ray of bin.rays)if(Math.abs(ray.r-r)<=tol)ambiguous.add(ray.p);
@@ -105,10 +113,127 @@
     }
     return ambiguous;
   }
+  // Fit a vertical slice through one bearing. A fixed pitch zero and a sloping
+  // surface can give the same slope, so automatic mode preserves that slope.
+  function pitchSection(column,bearing,explicit){
+    const nx=Math.sin(bearing),nz=Math.cos(bearing),byPitch=new Map();
+    for(const r of column){
+      const key=Math.round(r.p.pitch/5);
+      if(!byPitch.has(key))byPitch.set(key,[]);
+      byPitch.get(key).push(r);
+    }
+    if(byPitch.size<7||!byPitch.has(0))return null;
+    const bins=new Map();
+    for(const [key,rays] of byPitch){
+      const range=median(rays.map(v=>v.r)),tol=.011+.024*range;
+      const core=rays.filter(v=>Math.abs(v.r-range)<=tol);
+      if(core.length<rays.length*.6)continue;
+      bins.set(key,{range,rays,depth:median(core.map(v=>v.p.x*nx+v.p.z*nz)),
+        height:median(core.map(v=>v.p.y)),pitch:median(core.map(v=>v.p.pitch))});
+    }
+    const anchor=bins.get(0);
+    if(!anchor||Math.abs(anchor.pitch)>2.6)return null;
+    const run=[anchor];
+    for(const sign of [-1,1]){
+      let prev=anchor;
+      for(let k=sign;bins.has(k);k+=sign){
+        const b=bins.get(k);
+        // A shelf edge or an opening can start on the next raster line.
+        if(Math.abs(prev.range-b.range)>.014+.05*Math.min(prev.range,b.range))break;
+        if(sign<0)run.unshift(b);else run.push(b);
+        prev=b;
+      }
+    }
+    const low=run[0],high=run[run.length-1],span=high.pitch-low.pitch;
+    if(run.length<7||span<29||high.height-low.height<.08)return null;
+    // The station key is quantized. Reject profiles assembled while turning
+    // or translating beyond the travel of the transducer around its pitch pivot.
+    const first=anchor.rays[0];
+    for(const b of run)for(const r of b.rays){
+      if(Math.cos(first.p.head-r.p.head)<Math.cos(3*rad)||Math.hypot(r.ox-first.ox,r.oz-first.oz)>.047)return null;
+    }
+    const slopes=[];
+    for(const a of run)for(const b of run){
+      if(b.pitch-a.pitch<span*.4||b.height-a.height<.04)continue;
+      slopes.push((b.depth-a.depth)/(b.height-a.height));
+    }
+    if(!slopes.length)return null;
+    const slope=median(slopes);
+    if(Math.abs(slope)>.72)return null;
+    const at=median(run.map(b=>b.depth-slope*(b.height-anchor.height)));
+    const residual=b=>b.depth-at-slope*(b.height-anchor.height);
+    const errors=run.map(residual),tol=.01+.022*anchor.range;
+    if(median(errors.map(Math.abs))>tol||errors.some(v=>Math.abs(v)>2.6*tol))return null;
+    if(!explicit){
+      // Constant range across elevation also occurs on a cylindrical reflector.
+      const ranges=run.map(b=>b.range).sort((a,b)=>a-b);
+      if(ranges[ranges.length-2]-ranges[1]<.009+.014*anchor.range)return null;
+      const edge=Math.max(2,Math.round(run.length*.23));
+      const middle=errors.slice(edge,-edge);
+      const sag=median(middle)-(median(errors.slice(0,edge))+median(errors.slice(-edge)))/2;
+      // Only compensate a shallow, outward bow on the scale of the scanned arc.
+      const angularSag=anchor.range*(1-Math.cos(span*rad/2));
+      if(sag<Math.max(.0028+.0015*anchor.range,.12*angularSag)||sag>1.35*angularSag)return null;
+    }
+    return {nx,nz,slope,at,anchor,low,high,run};
+  }
+
+  function compensatePitch(group,display,uncertain,reference){
+    if(group.length<7)return 0;
+    const columns=new Map(),models=new Map(),head=group[0].p.head;
+    for(const r of group){
+      const key=Math.round(r.p.yaw/5);
+      if(!columns.has(key))columns.set(key,[]);
+      columns.get(key).push(r);
+    }
+    for(const [key,column] of columns){
+      if(column.length<7)continue;
+      const section=pitchSection(column,head+key*5*rad,Boolean(reference));
+      if(section)models.set(key,section);
+    }
+    let changed=0;
+    for(const [key,m] of models){
+      // In a raster, seek independent support at a neighbouring bearing. A
+      // vertical-only sweep can instead provide a longer single-bearing profile.
+      const supported=[models.get(key-1),models.get(key+1)].some(other=>other&&
+        Math.abs(other.slope-m.slope)<.24&&Math.abs(other.anchor.range-m.anchor.range)<.025+.12*m.anchor.range&&
+        Math.min(other.high.pitch,m.high.pitch)-Math.max(other.low.pitch,m.low.pitch)>=24);
+      if(!reference&&!supported&&!(columns.size===1&&m.high.pitch-m.low.pitch>=39))continue;
+      if(reference){
+        const nx=Math.sin(reference.heading),nz=Math.cos(reference.heading);
+        const anchorDepth=median(m.anchor.rays.map(v=>v.p.x*nx+v.p.z*nz));
+        const matches=Math.abs(anchorDepth-reference.level)<.014+.025*m.anchor.range&&Math.abs(key*5)<=45;
+        // A supported depth break takes priority over the horizontal fit, even
+        // when a later echo happens to return to the earlier distance.
+        const inside=new Set(m.run.flatMap(b=>b.rays));
+        for(const r of columns.get(key))if(!matches||!inside.has(r))display[r.i]=r.p;
+        if(!matches)continue;
+      }
+      for(const b of m.run)for(const r of b.rays){
+        if(!reference&&(display[r.i]!==r.p||uncertain.has(r.p)))continue;
+        if(Math.abs(r.r-b.range)>.009+.02*b.range)continue;
+        let nx=m.nx,nz=m.nz,slope=m.slope,target=m.at+slope*(r.p.y-m.anchor.height);
+        if(reference){
+          nx=Math.sin(reference.heading);nz=Math.cos(reference.heading);slope=0;target=reference.level;
+        }
+        const gain=nx*r.dx+nz*r.dz-slope*r.dy;
+        if(gain<.55)continue;
+        const shift=(target-r.p.x*nx-r.p.z*nz)/gain;
+        const limit=reference ? .025+.23*r.r : .018+.045*r.r;
+        if(Math.abs(shift)>limit||r.p.y+shift*r.dy<.075)continue;
+        display[r.i]={...r.p,x:r.p.x+shift*r.dx,y:r.p.y+shift*r.dy,z:r.p.z+shift*r.dz};
+        if(reference)uncertain.delete(r.p);
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+
   function resolve(points,{raw=false}={}){
     const display=points.slice(),uncertain=new Set(),stations=new Map();
-    let corrected=0,confirmed=0;
-    if(raw)return {display,uncertain,corrected,confirmed};
+    let pitchCorrected=0,confirmed=0;
+    if(raw)return {display,uncertain,corrected:0,pitchCorrected,confirmed};
     points.forEach((p,i)=>{
       if(!Number.isFinite(p.head)||!Number.isFinite(p.distance)||p.y<.075||p.distance<2)return;
       const groupKey=(p.frontWall===true?'reference:':'auto:')+p.station;
@@ -118,8 +243,12 @@
     for(const group of stations.values()){
       const model=solve(group,group.some(r=>r.p.frontWall===true));
       const local=flatRangeRuns(group);
+      for(const p of flatRangeRuns(group,true))local.add(p);
       for(const p of local)uncertain.add(p);
-      if(!model)continue;
+      if(!model){
+        pitchCorrected+=compensatePitch(group,display,uncertain,null);
+        continue;
+      }
       if(model.explicit)confirmed++;
       for(const {ray:r,origin,cosine,incidence} of orientation(group,model.heading)){
         if(incidence>58*rad||cosine<=0)continue;
@@ -142,10 +271,13 @@
         const shift=axisRange-r.r;
         if(Math.abs(shift)>.22*Math.max(.3,r.r)+slack)continue;
         display[r.i]={...r.p,x:r.p.x+shift*r.dx,y:r.p.y+shift*r.dy,z:r.p.z+shift*r.dz};
-        uncertain.delete(r.p);corrected++;
+        uncertain.delete(r.p);
       }
+      pitchCorrected+=compensatePitch(group,display,uncertain,model.explicit?model:null);
+      if(model.explicit)for(const r of group)if(display[r.i]===r.p&&local.has(r.p))uncertain.add(r.p);
     }
-    return {display,uncertain,corrected,confirmed};
+    const corrected=display.reduce((count,p,i)=>count+Number(p!==points[i]),0);
+    return {display,uncertain,corrected,pitchCorrected,confirmed};
   }
   const api={resolve,angles,validCalibration,nominal};
   root.SonarProjection=api;if(typeof module==='object'&&module.exports)module.exports=api;

@@ -74,3 +74,51 @@ assert(Math.abs(observed*Math.cos(30*radians)-100)>8);
 assert(Math.abs(observed*Math.cos(actual*radians)-100)<1e-8);
 console.log('PASS convex cylinder, one-sided plateau and physical angle scale');
 
+
+// Rounded row medians from the November 24 front sector, with the range jump above +10 degrees.
+// Use generated poses and bearings so this regression contains no recorded route coordinates.
+const rowsCm=[39.8,39.6,40.4,40.5,41,42.4,43.5,43.7,45,74.4,58.3,92.5,92.6];
+function pitchRaster(profile,bearings=[-5,0,5],heading=1.8){
+  return bearings.flatMap(yaw=>profile.map((distance,i)=>{
+    const pitch=i*5-30,pos=pointAt(distance*4,yaw,pitch).multiplyScalar(.0025).applyAxisAngle(axis,heading);
+    return {x:pos.x+12,y:pos.y,z:pos.z-8,head:heading,station:'pitch-test',yaw,pitch,distance};
+  }));
+}
+const recorded=pitchRaster(rowsCm),before=JSON.stringify(recorded),projected=resolve(recorded);
+assert(projected.pitchCorrected>=24);
+assert.equal(projected.corrected,projected.pitchCorrected);
+assert(projected.display.every((q,i)=>q.distance===recorded[i].distance&&(q.pitch<15||q===recorded[i])));
+function sectionBow(points){
+  const line=points.filter(p=>p.yaw===0&&p.pitch<=10);
+  const depth=p=>p.x*Math.sin(p.head)+p.z*Math.cos(p.head);
+  const low=line[0],high=line.at(-1);
+  return Math.max(...line.map(p=>Math.abs(depth(p)-depth(low)-(depth(high)-depth(low))*(p.y-low.y)/(high.y-low.y))));
+}
+assert(sectionBow(recorded)>.012);
+assert(sectionBow(projected.display)<.001);
+const upright=resolve(recorded.map(p=>({...p,frontWall:true})));
+assert(upright.pitchCorrected>0);
+const near=upright.display.filter(p=>p.yaw===0&&p.pitch<=10);
+const depth=p=>p.x*Math.sin(p.head)+p.z*Math.cos(p.head);
+assert(Math.max(...near.map(depth))-Math.min(...near.map(depth))<.001);
+assert.equal(JSON.stringify(recorded),before);
+assert.equal(resolve(recorded,{raw:true}).pitchCorrected,0);
+assert(resolve(pitchRaster(rowsCm,[0])).pitchCorrected>0,'vertical-only sweep');
+assert(resolve(pitchRaster(rowsCm,[0]).map(p=>({...p,frontWall:true}))).pitchCorrected>0);
+assert.equal(resolve(pitchRaster(rowsCm.map(()=>45))).pitchCorrected,0,'constant-radius arc');
+assert(resolve(pitchRaster(rowsCm.map(()=>45),[0])).uncertain.size>0,'ambiguous pitch-only arc stays available in raw mode');
+const tilted=recorded.map(p=>{
+  const orig=pointAt(0,p.yaw,p.pitch).multiplyScalar(.0025).applyAxisAngle(axis,p.head);
+  const dir=new T.Vector3(Math.sin(p.head+p.yaw*rad)*Math.cos(p.pitch*rad),Math.sin(p.pitch*rad),Math.cos(p.head+p.yaw*rad)*Math.cos(p.pitch*rad));
+  const normal=new T.Vector3(Math.sin(p.head),-.24,Math.cos(p.head));
+  const r=(.6-orig.dot(normal))/dir.dot(normal),pos=orig.addScaledVector(dir,r);
+  return {...p,x:pos.x,y:pos.y,z:pos.z,distance:r*100};
+});
+assert.equal(resolve(tilted).pitchCorrected,0,'flat but inclined surface');
+assert.equal(resolve(recorded.map(p=>({...p,y:.02}))).pitchCorrected,0,'floor');
+assert.equal(resolve(recorded.filter(p=>p.pitch>-12&&p.pitch<12)).pitchCorrected,0,'sparse vertical coverage');
+assert.equal(resolve(recorded.map(p=>({...p,x:p.x+.15*(p.pitch/30)}))).pitchCorrected,0,'moving station');
+const mixed=[...recorded,{...recorded[3],distance:19,x:recorded[3].x-.1}];
+assert.equal(resolve(mixed).display.at(-1),mixed.at(-1),'foreground return rejected');
+console.log('PASS vertical raster, acquired range break, known front, vertical-only sweep, incline, radius, motion and raw view');
+

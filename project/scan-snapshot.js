@@ -142,11 +142,16 @@
     const info=host.parentNode.querySelector('.echo-info');
     const singleSite=samples.length&&samples.every(p=>Number.isFinite(p.head)&&p.station===samples[0].station)&&
       (route||scan).dataSource!=='simulation';
+    const endKey=route&&[route.restarts,route.gaps,Math.round(route.x*10),Math.round(route.y*10),Math.round(route.heading*12)].join(',');
+    const atEnd=p=>p.station===endKey&&Number.isFinite(p.head)&&Math.cos(p.head-route.heading)>=Math.cos(3*Math.PI/180);
     if(singleSite)selector.add(new Option('本站正对平墙','front'));
-    const drawIndex=new T.BufferAttribute(new Uint32Array(samples.length),1);
+    else if(route&&route.dataSource!=='simulation'&&samples.some(atEnd))selector.add(new Option('末站正对平墙','end'));
+    const drawIndex=new T.BufferAttribute(samples.length>65535?new Uint32Array(samples.length):new Uint16Array(samples.length),1);
     cloud.setIndex(drawIndex);
     function paintEchoes(){
-      const raw=selector.value==='raw',input=selector.value==='front'?samples.map(p=>({...p,frontWall:true})):samples;
+      const mode=selector.value,raw=mode==='raw';
+      const input=(mode==='front'||mode==='end')
+        ?samples.map(p=>mode==='front'||atEnd(p)?{...p,frontWall:true}:p):samples;
       const projection=root.SonarProjection.resolve(input,{
         raw:raw||(route||scan).dataSource==='simulation'});
       const result=walls.update(raw?[]:projection.display.filter(p=>!projection.uncertain.has(p)));
@@ -157,7 +162,7 @@
       });
       attr.needsUpdate=true;drawIndex.array.set(remaining);drawIndex.needsUpdate=true;
       cloud.setDrawRange(0,remaining.length);cloud.computeBoundingSphere();
-      info.textContent=raw?'原始距离沿中心射线显示':'平墙估算 '+projection.corrected+' 点 · 方向未定 '+projection.uncertain.size+' 点';
+      info.textContent=raw?'原始距离沿中心射线显示':'平墙估算 '+projection.corrected+' 点 · 其中俯仰截面补偿 '+projection.pitchCorrected+' 点 · 方向未定 '+projection.uncertain.size+' 点';
       render();
     }
     selector.onchange=paintEchoes;paintEchoes();
